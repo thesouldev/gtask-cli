@@ -1,0 +1,48 @@
+[project]
+name = "gtask"
+version = "0.1.0"
+description = "Add and manage Google Tasks from the terminal"
+requires-python = ">=3.10"
+dependencies = [
+    "typer>=0.12",
+    "rich>=13.0",
+    "google-api-python-client>=2.0",
+    "google-auth>=2.0",
+    "google-auth-oauthlib>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "black>=24.0", "pylint>=3.0", "build>=1.0"]
+
+[project.scripts]
+gtask = "gtask.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 79
+target-version = ["py310"]
+
+[tool.pylint.format]
+max-line-length = 79
+
+[tool.pylint.main]
+source-roots = ["src"]
+
+[tool.pylint.typecheck]
+# google-api-python-client builds its service objects dynamically, so pylint
+# cannot see methods like .tasks() or .tasklists() on the Resource class.
+ignored-classes = ["Resource"]
+
+[tool.pylint."messages control"]
+disable = [
+    "missing-function-docstring",
+    "too-few-public-methods",
+    "import-outside-toplevel",
+    "redefined-builtin",
+]
