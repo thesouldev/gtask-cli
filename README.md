@@ -14,22 +14,22 @@
 
 ## Overview
 
-gtask is a command line tool for adding and managing Google Tasks on one
-account. A task you capture at the desk lands in the same account your phone
-and iPad widgets read, and tasks with a due date appear in Google Calendar.
-The OAuth scope is tasks only, so it cannot read or touch Gmail, Drive, or
-Calendar.
+gtask is a fast, keyboard-first command line tool for Google Tasks. Capture a
+task without leaving the terminal, and it syncs to the Google Tasks apps, home
+screen widgets, and Google Calendar. The OAuth scope is tasks only, so gtask
+can read and write tasks and nothing else: no Gmail, no Drive, no Calendar.
 
-It is built to stay small. The aim is a task driven day with the least
-friction between a thought and it being captured.
+It is built to stay small, with the least friction between a thought and it
+being captured.
 
 ## Features
 
 - Add a task in one command with a terse, day first date format
-- A default briefing of today and overdue tasks across all lists
-- Complete or delete tasks by the number shown, never a raw id
-- Target an existing list or create one on the fly
+- A default view of today and overdue tasks across all lists
+- Complete, reopen, edit, or delete tasks by the number shown, never a raw id
+- Multiple lists and subtasks, with move and clear support
 - Tasks only OAuth scope, with the token cached locally
+- JSON output and stable ids for scripting
 - Built with Typer and Rich for a clean terminal experience
 
 ## Getting started
@@ -38,7 +38,7 @@ friction between a thought and it being captured.
 
 - Python 3.10 or newer
 - A Google account that holds your tasks
-- A one-time Google OAuth client, see [docs/setup.md](docs/setup.md)
+- A one-time Google OAuth client, see the [setup guide](https://thesouldev.github.io/gtask-cli/getting-started/setup/)
 - pipx, only if you use `make install`
 
 ### Installation
@@ -62,7 +62,7 @@ Confirm it is on your PATH:
 gtask --help
 ```
 
-Then complete the [one-time setup](docs/setup.md) and authorize:
+Then complete the [one-time setup](https://thesouldev.github.io/gtask-cli/getting-started/setup/) and authorize:
 
 ```bash
 gtask login
@@ -88,14 +88,14 @@ gtask ls                               # today and overdue across lists
 gtask done 2                           # complete task #2 from the last ls
 ```
 
-Full command reference is in [docs/usage.md](docs/usage.md).
+Full command reference is in the [CLI reference](https://thesouldev.github.io/gtask-cli/reference/usage/).
 
 ## Documentation
 
-- [Setup](docs/setup.md) one-time Google OAuth client and login
-- [Usage](docs/usage.md) every command, with the date format
-- [Configuration](docs/configuration.md) file locations and environment
-- [Architecture](docs/architecture.md) design, modules, and roadmap
+Full documentation lives at <https://thesouldev.github.io/gtask-cli>:
+
+- [Setup](https://thesouldev.github.io/gtask-cli/getting-started/setup/) install, OAuth client, and login
+- [CLI reference](https://thesouldev.github.io/gtask-cli/reference/usage/) every command and option
 
 ## Contributing
 

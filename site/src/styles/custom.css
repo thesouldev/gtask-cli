@@ -1,0 +1,7 @@
+/* Give page body content breathing room and a readable measure,
+   matching the centered hero on the splash page. */
+main .sl-markdown-content {
+	max-inline-size: 56rem;
+	margin-inline: auto;
+	padding-inline: 1.5rem;
+}

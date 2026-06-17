@@ -26,5 +26,6 @@ case ":$PATH:" in
   *) echo "Add $BIN_DIR to your PATH to use 'gtask' directly." ;;
 esac
 echo "Next:"
-echo "  1. Put your OAuth client at $CONFIG_DIR/credentials.json (see docs/setup.md)"
+echo "  1. Put your OAuth client at $CONFIG_DIR/credentials.json"
+echo "     Setup guide: https://thesouldev.github.io/gtask-cli/getting-started/setup/"
 echo "  2. Run: gtask login"

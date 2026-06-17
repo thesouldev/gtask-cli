@@ -1,0 +1,54 @@
+---
+title: gtask
+description: A fast, keyboard-first CLI for Google Tasks.
+template: splash
+hero:
+  tagline: Manage Google Tasks from the terminal. A fast, keyboard-first CLI that stays in sync with the Google Tasks apps and Google Calendar.
+  actions:
+    - text: Get started
+      link: /gtask-cli/getting-started/setup/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/thesouldev/gtask-cli
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Why gtask
+
+<CardGrid>
+	<Card title="Capture in one command" icon="pencil">
+		Add a task without leaving the terminal. No browser tab, no app switch,
+		no break in flow.
+	</Card>
+	<Card title="Private by design" icon="approve-check">
+		A tasks-only OAuth scope. gtask can read and write tasks and nothing
+		else: no email, no files, no calendar.
+	</Card>
+	<Card title="Syncs everywhere" icon="laptop">
+		Tasks created from the terminal sync to the Google Tasks apps, home
+		screen widgets, and Google Calendar.
+	</Card>
+	<Card title="Built to script" icon="seti:python">
+		JSON output and stable ids make gtask easy to drive from scripts and
+		automations.
+	</Card>
+</CardGrid>
+
+## Full Google Tasks coverage
+
+Add, list, complete, edit, and delete tasks. Organize with multiple lists and
+subtasks, move tasks within or across lists, and clear completed work. A terse
+date format keeps due dates fast to type.
+
+## Quick start
+
+```bash
+git clone https://github.com/thesouldev/gtask-cli.git
+cd gtask-cli
+make install
+gtask login
+gtask add "Email the client" 22
+```

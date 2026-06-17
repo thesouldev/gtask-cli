@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="gtask">
+  <style>
+    .tile { fill: #0b0b0c; }
+    .mark { stroke: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      .tile { fill: #ffffff; }
+      .mark { stroke: #0b0b0c; }
+    }
+  </style>
+  <rect class="tile" x="2" y="2" width="28" height="28" rx="7" />
+  <g class="mark" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="8.5 11 12 16 8.5 21" />
+    <polyline points="16 16.5 19 20 24.5 11.5" />
+  </g>
+</svg>
