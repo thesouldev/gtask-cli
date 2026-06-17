@@ -3,7 +3,8 @@ PY := $(VENV)/bin/python
 PIP := $(VENV)/bin/pip
 GTASK := $(VENV)/bin/gtask
 
-.PHONY: dev-install install build format lint test run-tests run clean
+.PHONY: dev-install install build format lint test run-tests run docs \
+	site site-build clean
 
 dev-install:
 	@python3 -m venv $(VENV)
@@ -30,6 +31,20 @@ run-tests: test
 
 run:
 	@$(GTASK) $(ARGS)
+
+docs:
+	@$(PY) -m typer gtask.cli utils docs --name gtask --output /tmp/gtask-usage.md
+	@mkdir -p site/src/content/docs/reference
+	@printf -- '---\ntitle: CLI reference\ndescription: Every gtask command and option.\n---\n\n' \
+		> site/src/content/docs/reference/usage.md
+	@tail -n +2 /tmp/gtask-usage.md >> site/src/content/docs/reference/usage.md
+	@rm -f /tmp/gtask-usage.md
+
+site:
+	@npm --prefix site run dev
+
+site-build:
+	@npm --prefix site run build
 
 clean:
 	@rm -rf $(VENV) dist build *.egg-info src/*.egg-info .pytest_cache
