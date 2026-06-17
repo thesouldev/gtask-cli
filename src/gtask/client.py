@@ -20,6 +20,7 @@ class Task:
     def __init__(self, raw: dict, list_id: str, list_title: str):
         self.id = raw["id"]
         self.title = raw.get("title", "") or "(untitled)"
+        self.notes = raw.get("notes", "")
         self.status = raw.get("status", "needsAction")
         self.list_id = list_id
         self.list_title = list_title
@@ -94,11 +95,17 @@ class GTasks:
         return items
 
     def add_task(
-        self, list_id: str, title: str, due: _dt.date | None = None
+        self,
+        list_id: str,
+        title: str,
+        due: _dt.date | None = None,
+        notes: str | None = None,
     ) -> dict:
         body: dict = {"title": title}
         if due:
             body["due"] = dates.to_rfc3339(due)
+        if notes:
+            body["notes"] = notes
         return self._svc.tasks().insert(tasklist=list_id, body=body).execute()
 
     def complete_task(self, list_id: str, task_id: str) -> dict:
@@ -113,13 +120,23 @@ class GTasks:
     def delete_task(self, list_id: str, task_id: str) -> None:
         self._svc.tasks().delete(tasklist=list_id, task=task_id).execute()
 
-    def set_due(self, list_id: str, task_id: str, due: _dt.date) -> dict:
+    def update_task(
+        self,
+        list_id: str,
+        task_id: str,
+        title: str | None = None,
+        notes: str | None = None,
+        due: _dt.date | None = None,
+    ) -> dict:
+        body: dict = {}
+        if title is not None:
+            body["title"] = title
+        if notes is not None:
+            body["notes"] = notes
+        if due is not None:
+            body["due"] = dates.to_rfc3339(due)
         return (
             self._svc.tasks()
-            .patch(
-                tasklist=list_id,
-                task=task_id,
-                body={"due": dates.to_rfc3339(due)},
-            )
+            .patch(tasklist=list_id, task=task_id, body=body)
             .execute()
         )

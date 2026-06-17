@@ -5,6 +5,7 @@ Command line interface for gtask, built with Typer and Rich.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 from typing import Optional
 
 import typer
@@ -39,13 +40,23 @@ def _due_label(due: Optional[_dt.date], today: _dt.date) -> str:
     return due.strftime("%d %b")
 
 
-def _resolve_list(g, name: str):
+def _resolve_list(g, name: str, assume_yes: bool = False):
     tl = g.find_list(name)
     if tl:
         return tl
-    if not typer.confirm(f"List '{name}' does not exist. Create it?"):
+    if not assume_yes and not typer.confirm(
+        f"List '{name}' does not exist. Create it?"
+    ):
         raise typer.Abort()
     return g.create_list(name)
+
+
+def _parse_date(value: str) -> _dt.date:
+    try:
+        return dates.parse_due(value)
+    except ValueError as e:
+        err.print(f"[red]Bad date:[/red] {e}")
+        raise typer.Exit(1) from e
 
 
 @app.command()
@@ -57,22 +68,21 @@ def add(
     list_name: Optional[str] = typer.Option(
         None, "-l", "--list", help="target list (created on demand)"
     ),
+    notes: Optional[str] = typer.Option(
+        None, "-n", "--notes", help="description / notes"
+    ),
+    yes: bool = typer.Option(
+        False, "-y", "--yes", help="create the list without prompting"
+    ),
 ):
     """
     Add a task.
     """
     g = _client()
-    tl = _resolve_list(g, list_name) if list_name else g.tasklists()[0]
+    tl = _resolve_list(g, list_name, yes) if list_name else g.tasklists()[0]
 
-    due = None
-    if date:
-        try:
-            due = dates.parse_due(date)
-        except ValueError as e:
-            err.print(f"[red]Bad date:[/red] {e}")
-            raise typer.Exit(1) from e
-
-    g.add_task(tl["id"], text, due)
+    due = _parse_date(date) if date else None
+    g.add_task(tl["id"], text, due, notes)
     when = f"  [dim]({_due_label(due, _dt.date.today())})[/dim]" if due else ""
     console.print(f"Added to [bold]{tl['title']}[/bold]: {text}{when}")
 
@@ -83,6 +93,9 @@ def ls(
         None, "-l", "--list", help="limit to one list"
     ),
     all: bool = typer.Option(False, "--all", help="show every open task"),
+    json_out: bool = typer.Option(
+        False, "--json", help="output JSON (id, list, title, notes, due)"
+    ),
 ):
     """
     List open tasks. Default shows today and overdue across lists.
@@ -126,6 +139,24 @@ def ls(
         ]
     )
 
+    if json_out:
+        print(
+            json.dumps(
+                [
+                    {
+                        "id": t.id,
+                        "list": t.list_title,
+                        "title": t.title,
+                        "notes": t.notes,
+                        "due": t.due.isoformat() if t.due else None,
+                        "status": t.status,
+                    }
+                    for t in tasks
+                ]
+            )
+        )
+        return
+
     if not tasks:
         console.print(
             "[dim]Nothing due.[/dim]"
@@ -163,16 +194,71 @@ def done(n: int = typer.Argument(..., help="task number from the last ls")):
 
 
 @app.command()
-def rm(n: int = typer.Argument(..., help="task number from the last ls")):
+def rm(
+    n: Optional[int] = typer.Argument(
+        None, help="task number from the last ls"
+    ),
+    task_id: Optional[str] = typer.Option(
+        None, "--id", help="delete by Google task id (needs --list)"
+    ),
+    list_name: Optional[str] = typer.Option(
+        None, "-l", "--list", help="list to use with --id"
+    ),
+):
     """
-    Delete a task by its ls number.
+    Delete a task by its ls number, or by --id with --list.
     """
+    if task_id:
+        if not list_name:
+            err.print("[red]--id requires --list.[/red]")
+            raise typer.Exit(1)
+        g = _client()
+        tl = g.find_list(list_name)
+        if not tl:
+            err.print(f"[red]No list named '{list_name}'[/red]")
+            raise typer.Exit(1)
+        g.delete_task(tl["id"], task_id)
+        console.print(f"Deleted task {task_id}")
+        return
+    if n is None:
+        err.print("[red]Pass a task number, or --id with --list.[/red]")
+        raise typer.Exit(1)
     row = store.lookup(n)
     if not row:
         err.print(f"[red]No task #{n}.[/red] Run `gtask ls` first.")
         raise typer.Exit(1)
     _client().delete_task(row["list_id"], row["task_id"])
     console.print(f"Deleted: {row['title']}")
+
+
+@app.command()
+def edit(
+    n: int = typer.Argument(..., help="task number from the last ls"),
+    text: Optional[str] = typer.Option(None, "-t", "--text", help="new text"),
+    notes: Optional[str] = typer.Option(
+        None, "-n", "--notes", help="new description / notes"
+    ),
+    date: Optional[str] = typer.Option(
+        None, "-d", "--date", help="new due date"
+    ),
+):
+    """
+    Update a task's text, notes, or due date by its ls number.
+    """
+    if text is None and notes is None and date is None:
+        err.print(
+            "[red]Nothing to update.[/red] Pass --text, --notes, or --date."
+        )
+        raise typer.Exit(1)
+    row = store.lookup(n)
+    if not row:
+        err.print(f"[red]No task #{n}.[/red] Run `gtask ls` first.")
+        raise typer.Exit(1)
+    due = _parse_date(date) if date else None
+    _client().update_task(
+        row["list_id"], row["task_id"], title=text, notes=notes, due=due
+    )
+    console.print(f"Updated: {text or row['title']}")
 
 
 @app.command()
