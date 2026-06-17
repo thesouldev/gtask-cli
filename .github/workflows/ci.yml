@@ -28,7 +28,7 @@ jobs:
           path: dist/
 
   test:
-    name: Unit tests
+    name: Tests
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -39,20 +39,8 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: pytest -q
 
-  format:
-    name: Format
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - run: pip install black
-      - run: black --check --diff src tests
-
-  lint:
-    name: Lint
+  static:
+    name: Static analysis
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -61,4 +49,5 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: pip install -e ".[dev]"
+      - run: black --check --diff src tests
       - run: pylint src
