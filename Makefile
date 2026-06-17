@@ -9,6 +9,7 @@ dev-install:
 	@python3 -m venv $(VENV)
 	@$(PIP) install --upgrade pip
 	@$(PIP) install -e ".[dev]"
+	@git config core.hooksPath .githooks
 
 install:
 	@command -v pipx >/dev/null 2>&1 && pipx install --force . || ./install.sh
