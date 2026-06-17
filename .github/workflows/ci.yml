@@ -13,6 +13,7 @@ env:
 
 jobs:
   build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +28,7 @@ jobs:
           path: dist/
 
   test:
+    name: Unit tests
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -38,6 +40,7 @@ jobs:
       - run: pytest -q
 
   format:
+    name: Format
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -49,6 +52,7 @@ jobs:
       - run: black --check --diff src tests
 
   lint:
+    name: Lint
     needs: format
     runs-on: ubuntu-latest
     steps:
