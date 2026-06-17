@@ -97,17 +97,6 @@ Full command reference is in [docs/usage.md](docs/usage.md).
 - [Configuration](docs/configuration.md) file locations and environment
 - [Architecture](docs/architecture.md) design, modules, and roadmap
 
-## Project structure
-
-```
-.
-├── src/gtask/   config, auth, client, dates, store, cli
-├── tests/       unit tests
-├── docs/        setup, usage, configuration, architecture
-├── Makefile     dev and install commands
-└── install.sh   one-shot installer
-```
-
 ## Contributing
 
 Contributions are welcome. Open an issue to discuss substantial changes before
