@@ -114,16 +114,30 @@ def test_due_today_includes_overdue_and_done_today():
     assert ids == ["overdue", "today", "done_today"]
 
 
-def test_done_today_keeps_only_todays_completions():
+def test_build_rows_nests_subtasks_and_sinks_done_parents():
     yesterday = TODAY - datetime.timedelta(days=1)
-    tasks = [
-        make("open"),
-        make("done_today", status="completed", completed=TODAY, position="1"),
-        make(
-            "done_old", status="completed", completed=yesterday, position="2"
-        ),
-    ]
-    assert [t.id for t in view.done_today(tasks, TODAY)] == ["done_today"]
+    p1 = make("p1", position="0")
+    c_open = make("c_open", parent="p1", position="0")
+    c_today = make(
+        "c_today",
+        parent="p1",
+        status="completed",
+        completed=TODAY,
+        position="1",
+    )
+    c_old = make(
+        "c_old",
+        parent="p1",
+        status="completed",
+        completed=yesterday,
+        position="2",
+    )
+    p2 = make("p2", status="completed", completed=TODAY, position="1")
+    pool = [p1, c_open, c_today, c_old, p2]
+    rows = view.build_rows([p1, p2], pool, TODAY)
+    # open parent first with its open + today-done kids (old kid hidden),
+    # then the completed parent sinks to the bottom.
+    assert [t.id for t in rows] == ["p1", "c_open", "c_today", "p2"]
 
 
 def test_mark_stamps_and_clears_completion():

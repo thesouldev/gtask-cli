@@ -79,16 +79,20 @@ def order_tree(tasks: list[Task]) -> list[tuple[Task, int]]:
 
 def due_today(tasks: list[Task], today: _dt.date) -> list[Task]:
     """
-    Open overdue/today tasks, plus tasks completed today, across lists.
+    For Today: open overdue/today tasks, anything due today, and anything
+    completed today, so finishing a task keeps it visible until tomorrow.
     """
     rows = [
         t
         for t in tasks
-        if t.due is not None
-        and not t.deleted
-        and ((t.due <= today and not t.done) or t.due == today)
+        if not t.deleted
+        and (
+            (t.due is not None and t.due <= today and not t.done)
+            or t.due == today
+            or (t.done and t.completed_date == today)
+        )
     ]
-    rows.sort(key=lambda t: (t.due, t.list_title))
+    rows.sort(key=lambda t: (t.due or today, t.list_title))
     return rows
 
 
@@ -101,10 +105,20 @@ def due_on(tasks: list[Task], day: _dt.date) -> list[Task]:
     return rows
 
 
-def done_today(tasks: list[Task], today: _dt.date) -> list[Task]:
+def build_rows(
+    top: list[Task], pool: list[Task], today: _dt.date
+) -> list[Task]:
     """
-    Tasks completed today, ordered by position (older done tasks drop off).
+    Order top-level tasks (open first, completed last) each followed by its
+    subtasks (open or completed today), preserving sibling order.
     """
-    rows = [t for t in tasks if t.done and t.completed_date == today]
-    rows.sort(key=lambda t: t.position)
+    children: dict[str, list[Task]] = {}
+    for t in pool:
+        if t.parent and not t.deleted:
+            children.setdefault(t.parent, []).append(t)
+    rows: list[Task] = []
+    for parent in sorted(top, key=lambda t: t.done):
+        rows.append(parent)
+        kids = sorted(children.get(parent.id, []), key=lambda k: k.position)
+        rows.extend(k for k in kids if not k.done or k.completed_date == today)
     return rows

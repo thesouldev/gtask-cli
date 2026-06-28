@@ -2,7 +2,7 @@ import datetime
 
 import pytest
 
-from gtask.tui import parse_due_input
+from gtask.tui_widgets import parse_due_input
 
 TODAY = datetime.date(2026, 6, 17)
 TOMORROW = datetime.date(2026, 6, 18)

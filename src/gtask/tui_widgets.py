@@ -385,6 +385,7 @@ class HelpScreen(ModalScreen):
         ("Space", "toggle done"),
         ("o", "open URL in browser"),
         ("a", "add task / new list"),
+        ("Shift+A", "add subtask"),
         ("e", "edit task / rename list"),
         ("d / x", "delete task / list"),
         ("/", "search"),
@@ -428,6 +429,7 @@ def hint_bar(mode: str = "tasks") -> Text:
             ("Space", "done"),
             ("o", "link"),
             ("a", "add"),
+            ("A", "subtask"),
             ("e", "edit"),
             ("d", "delete"),
             ("/", "search"),
@@ -452,3 +454,198 @@ def hint_bar(mode: str = "tasks") -> Text:
         text.append(f" {key} ", style=YELLOW)
         text.append(f"{desc}  ", style=FAINT)
     return text
+
+
+class TaskForm(ModalScreen):
+    """
+    Add a new task, or edit an existing one, in a docked panel.
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", show=False),
+        Binding("enter", "save", show=False),
+    ]
+
+    def __init__(
+        self, lists, default_list_id, today, task=None, parent=None
+    ) -> None:
+        super().__init__()
+        self._lists = lists
+        self._today = today
+        self._task_obj = task
+        self._parent_obj = parent  # set when adding a subtask
+        self._fields = ["title", "notes", "due"]
+        if parent is None:
+            self._fields.append("list")
+        self.due_field = DueField(today, self._due_default())
+        start = (
+            parent.list_id
+            if parent
+            else (task.list_id if task else default_list_id)
+        )
+        self.chooser = ListChooser(lists, start)
+
+    def _due_default(self) -> str:
+        if self._task_obj is None:
+            return "today"
+        due = self._task_obj.due
+        if due is None:
+            return "none"
+        if due == self._today:
+            return "today"
+        if due == self._today + _dt.timedelta(days=1):
+            return "tomorrow"
+        return due.strftime("%d-%m-%Y")
+
+    def compose(self) -> ComposeResult:
+        editing = self._task_obj is not None
+        with Vertical(id="form"):
+            with Horizontal(classes="form-head"):
+                yield Static(
+                    self._header(editing),
+                    id="form_title",
+                    classes="head-title",
+                )
+                yield Static(
+                    Text("Tab walks fields · ⇧Tab back", style=FAINT),
+                    classes="head-hint",
+                )
+            yield self._row(
+                "title",
+                Input(
+                    value=self._task_obj.title if editing else "",
+                    placeholder="Task title…",
+                    classes="inline",
+                    id="f_title",
+                ),
+            )
+            yield self._row(
+                "notes",
+                Input(
+                    value=self._task_obj.notes if editing else "",
+                    placeholder="notes — optional, paste any links here",
+                    classes="inline",
+                    id="f_notes",
+                ),
+            )
+            yield self._row("due", self.due_field)
+            if self._parent_obj is None:
+                yield self._row("list", self.chooser)
+            with Horizontal(classes="form-foot"):
+                yield Static(id="foot_status")
+                yield Static(
+                    Text.assemble(
+                        ("Enter", AQUA),
+                        (" save · ", FAINT),
+                        ("Esc", RED),
+                        (" cancel", FAINT),
+                    ),
+                    classes="foot-hint",
+                )
+
+    def _header(self, editing: bool) -> Text:
+        if editing:
+            return Text.assemble(
+                ("edit › ", f"bold {YELLOW}"),
+                (self._task_obj.title, FG),
+            )
+        if self._parent_obj is not None:
+            return Text.assemble(
+                ("add › ", f"bold {YELLOW}"),
+                ("subtask under ", FAINT),
+                (self._parent_obj.title, AQUA),
+            )
+        return Text.assemble(
+            ("add › ", f"bold {YELLOW}"),
+            ("new task in ", FAINT),
+            (self._list_name(self.chooser.value), AQUA),
+        )
+
+    def on_list_chooser_changed(self, _event: ListChooser.Changed) -> None:
+        if self._task_obj is None:
+            self.query_one("#form_title", Static).update(self._header(False))
+        self._refresh_status()
+
+    def _row(self, name: str, *content) -> Horizontal:
+        label = Static(classes="field-label", id=f"lbl_{name}")
+        return Horizontal(label, *content, classes="field")
+
+    def _list_name(self, list_id: str) -> str:
+        for item in self._lists:
+            if item["id"] == list_id:
+                return item["title"]
+        return "?"
+
+    def on_mount(self) -> None:
+        self._mark("title")
+        self._refresh_status()
+        self.query_one("#f_title", Input).focus()
+
+    def on_descendant_focus(self, event: events.DescendantFocus) -> None:
+        widget = event.widget
+        if isinstance(widget, ListChooser):
+            self._mark("list")
+        elif isinstance(widget, DueField):
+            self._mark("due")
+        elif widget.id and widget.id.startswith("f_"):
+            self._mark(widget.id[2:])
+
+    def _mark(self, active: str) -> None:
+        for name in self._fields:
+            marker = "▸ " if name == active else "  "
+            style = f"bold {YELLOW}" if name == active else FAINT
+            self.query_one(f"#lbl_{name}", Static).update(
+                Text(f"{marker}{name}", style=style)
+            )
+
+    def on_due_field_changed(self, _event: DueField.Changed) -> None:
+        self._refresh_status()
+
+    def _refresh_status(self) -> None:
+        target = self._list_name(self.chooser.value)
+        due = self.due_field.value()
+        if self._task_obj is None:
+            status = Text.assemble(
+                ("type a title, hit ", FAINT),
+                ("Enter", AQUA),
+                (" → saved to ", FAINT),
+                (target, AQUA),
+                (" · ", FAINT),
+                (due, YELLOW),
+            )
+        else:
+            status = Text.assemble(
+                ("Enter", AQUA),
+                (" → ", FAINT),
+                (target, AQUA),
+                (" · ", FAINT),
+                (due, YELLOW),
+            )
+        self.query_one("#foot_status", Static).update(status)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    def on_input_submitted(self, _event: Input.Submitted) -> None:
+        self.action_save()
+
+    def action_save(self) -> None:
+        title = self.query_one("#f_title", Input).value.strip()
+        if not title:
+            self.app.notify("Title is required", severity="warning")
+            self.query_one("#f_title", Input).focus()
+            return
+        try:
+            due = parse_due_input(self.due_field.value(), self._today)
+        except ValueError as exc:
+            self.app.notify(f"Bad date: {exc}", severity="warning")
+            return
+        self.dismiss(
+            {
+                "title": title,
+                "notes": self.query_one("#f_notes", Input).value.strip(),
+                "due": due,
+                "list_id": self.chooser.value,
+                "parent": self._parent_obj.id if self._parent_obj else None,
+            }
+        )
