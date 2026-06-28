@@ -99,3 +99,12 @@ def due_on(tasks: list[Task], day: _dt.date) -> list[Task]:
     rows = [t for t in tasks if t.due == day and not t.deleted and not t.done]
     rows.sort(key=lambda t: t.list_title)
     return rows
+
+
+def done_today(tasks: list[Task], today: _dt.date) -> list[Task]:
+    """
+    Tasks completed today, ordered by position (older done tasks drop off).
+    """
+    rows = [t for t in tasks if t.done and t.completed_date == today]
+    rows.sort(key=lambda t: t.position)
+    return rows

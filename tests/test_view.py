@@ -16,6 +16,7 @@ def make(
     parent=None,
     position="0",
     deleted=False,
+    completed=None,
     list_id="L1",
     list_title="Work",
 ):
@@ -26,6 +27,8 @@ def make(
         raw["parent"] = parent
     if deleted:
         raw["deleted"] = True
+    if completed is not None:
+        raw["completed"] = completed.strftime("%Y-%m-%dT12:00:00.000Z")
     return Task(raw, list_id, list_title)
 
 
@@ -109,6 +112,27 @@ def test_due_today_includes_overdue_and_done_today():
     ]
     ids = [t.id for t in view.due_today(tasks, TODAY)]
     assert ids == ["overdue", "today", "done_today"]
+
+
+def test_done_today_keeps_only_todays_completions():
+    yesterday = TODAY - datetime.timedelta(days=1)
+    tasks = [
+        make("open"),
+        make("done_today", status="completed", completed=TODAY, position="1"),
+        make(
+            "done_old", status="completed", completed=yesterday, position="2"
+        ),
+    ]
+    assert [t.id for t in view.done_today(tasks, TODAY)] == ["done_today"]
+
+
+def test_mark_stamps_and_clears_completion():
+    t = make("a")
+    assert not t.done and t.completed_date is None
+    t.mark(True)
+    assert t.done and t.completed_date == datetime.date.today()
+    t.mark(False)
+    assert not t.done and t.completed_date is None
 
 
 def test_due_on_matches_single_day_open_only():

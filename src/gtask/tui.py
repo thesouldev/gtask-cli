@@ -549,9 +549,7 @@ class GTaskTUI(App):
             open_rows = [
                 t for t, _ in view.order_tree([t for t in tasks if not t.done])
             ]
-            done_rows = sorted(
-                (t for t in tasks if t.done), key=lambda t: t.position
-            )
+            done_rows = view.done_today(tasks, self._today)
             self.view_rows = open_rows + done_rows
             title = self._list_title(value)
         # Completed tasks always sink to the bottom (stable within groups).
