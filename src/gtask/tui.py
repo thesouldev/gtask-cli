@@ -17,19 +17,13 @@ import datetime as _dt
 import webbrowser
 
 from rich.text import Text
-from textual import work
+from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.message import Message
 from textual.screen import ModalScreen
-from textual.widgets import (
-    Button,
-    DataTable,
-    Input,
-    OptionList,
-    Select,
-    Static,
-)
+from textual.widgets import DataTable, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from . import dates, view
@@ -222,19 +216,119 @@ class HelpScreen(ModalScreen):
         self.dismiss(None)
 
 
-class TaskForm(ModalScreen):
+class Chip(Static):
     """
-    Add a new task, or edit an existing one.
+    A clickable option in the task form: a due preset or a list name.
     """
 
-    BINDINGS = [Binding("escape", "cancel", show=False)]
+    class Picked(Message):
+        """
+        Posted when a chip is clicked, carrying its group and value.
+        """
+
+        def __init__(self, group: str, value: str) -> None:
+            self.group = group
+            self.value = value
+            super().__init__()
+
+    def __init__(self, label: str, group: str, value: str) -> None:
+        super().__init__(label, classes="chip")
+        self.group = group
+        self.option_value = value
+
+    def on_click(self) -> None:
+        self.post_message(self.Picked(self.group, self.option_value))
+
+
+class ListChooser(Horizontal):
+    """
+    Focusable row of list names; h/l (or ‹ ›) cycles the target list.
+    """
+
+    can_focus = True
+    BINDINGS = [
+        Binding("left", "prev", show=False),
+        Binding("h", "prev", show=False),
+        Binding("right", "next", show=False),
+        Binding("l", "next", show=False),
+    ]
+
+    class Changed(Message):
+        """
+        Posted when the selected list changes, carrying its id.
+        """
+
+        def __init__(self, value: str) -> None:
+            self.value = value
+            super().__init__()
+
+    def __init__(self, lists: list[dict], value: str) -> None:
+        super().__init__(classes="chooser")
+        self._lists = lists
+        self.index = next(
+            (i for i, it in enumerate(lists) if it["id"] == value), 0
+        )
+
+    def compose(self) -> ComposeResult:
+        yield Static("‹ ", classes="arrow")
+        for item in self._lists:
+            yield Chip(item["title"], "list", item["id"])
+        yield Static(" ›", classes="arrow")
+
+    def on_mount(self) -> None:
+        self._sync()
+
+    @property
+    def value(self) -> str:
+        return self._lists[self.index]["id"]
+
+    def action_prev(self) -> None:
+        self.index = (self.index - 1) % len(self._lists)
+        self._sync()
+
+    def action_next(self) -> None:
+        self.index = (self.index + 1) % len(self._lists)
+        self._sync()
+
+    def select(self, list_id: str) -> None:
+        self.index = next(
+            (i for i, it in enumerate(self._lists) if it["id"] == list_id),
+            self.index,
+        )
+        self._sync()
+
+    def _sync(self) -> None:
+        for i, chip in enumerate(self.query(Chip)):
+            chip.set_class(i == self.index, "list-active")
+        self.post_message(self.Changed(self.value))
+
+
+class TaskForm(ModalScreen):
+    """
+    Add a new task, or edit an existing one, in a docked panel.
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", show=False),
+        Binding("enter", "save", show=False),
+    ]
+
+    DUE_PRESETS = (
+        ("today", "today"),
+        ("tomorrow", "tomorrow"),
+        ("none", "none"),
+    )
 
     def __init__(self, lists, default_list_id, today, task=None) -> None:
         super().__init__()
         self._lists = lists
-        self._default_list_id = default_list_id
         self._today = today
         self._task_obj = task
+        self._fields = ["title", "notes", "due"]
+        self.chooser: ListChooser | None = None
+        if task is None:
+            self._fields.append("list")
+            self.chooser = ListChooser(lists, default_list_id)
 
     def _due_default(self) -> str:
         if self._task_obj is None:
@@ -245,50 +339,152 @@ class TaskForm(ModalScreen):
     def compose(self) -> ComposeResult:
         editing = self._task_obj is not None
         with Vertical(id="form"):
-            label = "edit ›" if editing else "add ›"
-            yield Static(Text(label, style=f"bold {YELLOW}"))
-            yield Input(
-                value=self._task_obj.title if editing else "",
-                placeholder="Task title…",
-                id="f_title",
-            )
-            yield Input(
-                value=self._task_obj.notes if editing else "",
-                placeholder="notes — optional, paste any links here",
-                id="f_notes",
-            )
-            yield Input(
-                value=self._due_default(),
-                placeholder="today / tomorrow / none / 22 / 22-06",
-                id="f_due",
-            )
-            if not editing:
-                yield Select(
-                    [(item["title"], item["id"]) for item in self._lists],
-                    value=self._default_list_id,
-                    allow_blank=False,
-                    id="f_list",
+            with Horizontal(classes="form-head"):
+                yield Static(
+                    self._header(editing),
+                    id="form_title",
+                    classes="head-title",
                 )
-            with Horizontal(id="form-buttons"):
-                yield Button("Save", variant="primary", id="save")
-                yield Button("Cancel", id="cancel")
+                yield Static(
+                    Text("Tab walks fields · ⇧Tab back", style=FAINT),
+                    classes="head-hint",
+                )
+            yield self._row(
+                "title",
+                Input(
+                    value=self._task_obj.title if editing else "",
+                    placeholder="Task title…",
+                    classes="inline",
+                    id="f_title",
+                ),
+            )
+            yield self._row(
+                "notes",
+                Input(
+                    value=self._task_obj.notes if editing else "",
+                    placeholder="notes — optional, paste any links here",
+                    classes="inline",
+                    id="f_notes",
+                ),
+            )
+            yield self._row(
+                "due",
+                *(Chip(label, "due", val) for label, val in self.DUE_PRESETS),
+                Static("·", classes="sep"),
+                Input(
+                    value=self._due_default(), classes="inline due", id="f_due"
+                ),
+                Static("", classes="preview", id="due_preview"),
+            )
+            if self.chooser is not None:
+                yield self._row("list", self.chooser)
+            with Horizontal(classes="form-foot"):
+                yield Static(id="foot_status")
+                yield Static(
+                    Text.assemble(
+                        ("Enter", AQUA),
+                        (" save · ", FAINT),
+                        ("Esc", RED),
+                        (" cancel", FAINT),
+                    ),
+                    classes="foot-hint",
+                )
+
+    def _header(self, editing: bool) -> Text:
+        if editing:
+            return Text.assemble(
+                ("edit › ", f"bold {YELLOW}"),
+                (self._task_obj.title, FG),
+            )
+        return Text.assemble(
+            ("add › ", f"bold {YELLOW}"),
+            ("new task in ", FAINT),
+            (self._list_name(self.chooser.value), AQUA),
+        )
+
+    def on_list_chooser_changed(self, _event: ListChooser.Changed) -> None:
+        self.query_one("#form_title", Static).update(self._header(False))
+        self._refresh_status()
+
+    def _row(self, name: str, *content) -> Horizontal:
+        label = Static(classes="field-label", id=f"lbl_{name}")
+        return Horizontal(label, *content, classes="field")
+
+    def _list_name(self, list_id: str) -> str:
+        for item in self._lists:
+            if item["id"] == list_id:
+                return item["title"]
+        return "?"
 
     def on_mount(self) -> None:
+        self._mark("title")
+        self._refresh_due(self._due_default())
+        self._refresh_status()
         self.query_one("#f_title", Input).focus()
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "save":
-            self._save()
-        else:
-            self.dismiss(None)
+    def on_descendant_focus(self, event: events.DescendantFocus) -> None:
+        widget = event.widget
+        if isinstance(widget, ListChooser):
+            self._mark("list")
+        elif widget.id and widget.id.startswith("f_"):
+            self._mark(widget.id[2:])
 
-    def on_input_submitted(self, _event: Input.Submitted) -> None:
-        self._save()
+    def _mark(self, active: str) -> None:
+        for name in self._fields:
+            marker = "▸ " if name == active else "  "
+            style = f"bold {YELLOW}" if name == active else FAINT
+            self.query_one(f"#lbl_{name}", Static).update(
+                Text(f"{marker}{name}", style=style)
+            )
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id == "f_due":
+            self._refresh_due(event.value)
+            self._refresh_status()
+
+    def _refresh_due(self, value: str) -> None:
+        word = value.strip().lower()
+        for chip in self.query(Chip):
+            if chip.group == "due":
+                active = chip.option_value == word or (
+                    chip.option_value == "today" and word == ""
+                )
+                chip.set_class(active, "active")
+        try:
+            due = parse_due_input(value, self._today)
+            text = "→ no date" if due is None else f"→ {due:%d %b %Y}"
+            style = FAINT
+        except ValueError:
+            text, style = "→ ?", RED
+        self.query_one("#due_preview", Static).update(Text(text, style=style))
+
+    def on_chip_picked(self, event: Chip.Picked) -> None:
+        if event.group == "due":
+            self.query_one("#f_due", Input).value = event.value
+        elif self.chooser is not None:
+            self.chooser.select(event.value)
+
+    def _refresh_status(self) -> None:
+        if self.chooser is None:
+            return
+        due_word = self.query_one("#f_due", Input).value.strip() or "today"
+        status = Text.assemble(
+            ("type a title, hit ", FAINT),
+            ("Enter", AQUA),
+            (" → saved to ", FAINT),
+            (self._list_name(self.chooser.value), AQUA),
+            (" · ", FAINT),
+            (due_word, YELLOW),
+        )
+        self.query_one("#foot_status", Static).update(status)
 
     def action_cancel(self) -> None:
         self.dismiss(None)
 
-    def _save(self) -> None:
+    def on_input_submitted(self, _event: Input.Submitted) -> None:
+        self.action_save()
+
+    def action_save(self) -> None:
         title = self.query_one("#f_title", Input).value.strip()
         if not title:
             self.app.notify("Title is required", severity="warning")
@@ -302,9 +498,7 @@ class TaskForm(ModalScreen):
             self.app.notify(f"Bad date: {exc}", severity="warning")
             return
         list_id = (
-            self._task_obj.list_id
-            if self._task_obj
-            else self.query_one("#f_list", Select).value
+            self._task_obj.list_id if self._task_obj else self.chooser.value
         )
         self.dismiss(
             {
