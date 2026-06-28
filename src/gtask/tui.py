@@ -337,6 +337,7 @@ class GTaskTUI(App):
         self._list_edit: str | None = None  # None | "new" | "rename"
         self._list_target: str | None = None
         self._list_buffer = ""
+        self._suppress = False  # ignore highlight events during a rebuild
 
         self.sidebar = Sidebar(id="sidebar")
         self.sidebar.border_title = "Lists"
@@ -443,9 +444,14 @@ class GTaskTUI(App):
         self._option_ids = [
             opt.id for opt in options if isinstance(opt, Option)
         ]
+        self._suppress = True
         self.sidebar.clear_options()
         self.sidebar.add_options(options)
         self._highlight_sidebar()
+        self.call_after_refresh(self._unsuppress)
+
+    def _unsuppress(self) -> None:
+        self._suppress = False
 
     def _edit_row(self, list_id: str | None) -> Option:
         color = self.list_colors.get(list_id, YELLOW) if list_id else YELLOW
@@ -495,6 +501,8 @@ class GTaskTUI(App):
     def on_option_list_option_highlighted(
         self, event: OptionList.OptionHighlighted
     ) -> None:
+        if self._suppress:
+            return
         self._select_view(event.option_id)
 
     def on_option_list_option_selected(
