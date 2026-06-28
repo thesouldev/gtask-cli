@@ -384,7 +384,7 @@ class GTaskTUI(App):
             return
         self.call_from_thread(self._apply, bundles)
 
-    def _apply(self, bundles) -> None:
+    def _apply(self, bundles, select=None) -> None:
         self.lists = []
         self.tasks_by_list = {}
         self.list_colors = {}
@@ -395,7 +395,9 @@ class GTaskTUI(App):
             )
             self.tasks_by_list[list_id] = tasks
             self.list_colors[list_id] = view.list_color(index)
-        if self.current_view is None or (
+        if select and select[1] in self.tasks_by_list:
+            self.current_view = select
+        elif self.current_view is None or (
             self.current_view[0] == "list"
             and self.current_view[1] not in self.tasks_by_list
         ):
@@ -836,9 +838,10 @@ class GTaskTUI(App):
     @work(thread=True)
     def _list_op(self, kind: str, list_id: str | None, name: str) -> None:
         svc = self._service()
+        select = None
         try:
             if kind == "new":
-                svc.create_list(name)
+                select = ("list", svc.create_list(name)["id"])
             elif kind == "rename":
                 svc.rename_list(list_id, name)
             elif kind == "delete":
@@ -849,7 +852,7 @@ class GTaskTUI(App):
                 self.notify, f"List {kind} failed: {exc}", severity="error"
             )
             return
-        self.call_from_thread(self._apply, bundles)
+        self.call_from_thread(self._apply, bundles, select)
 
     @work(thread=True)
     def _create(self, data) -> None:
