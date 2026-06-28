@@ -30,7 +30,9 @@ def list_color(index: int) -> str:
 
 
 def first_url(*texts: str | None) -> str | None:
-    """First http(s) URL found across the given texts, if any."""
+    """
+    First http(s) URL found across the given texts, if any.
+    """
     for text in texts:
         match = _URL.search(text or "")
         if match:
@@ -51,7 +53,9 @@ def due_label(due: _dt.date | None, today: _dt.date) -> str:
 
 
 def order_tree(tasks: list[Task]) -> list[tuple[Task, int]]:
-    """Order tasks per list as parents followed by their children (depth 1)."""
+    """
+    Order tasks per list as parents followed by their children (depth 1).
+    """
     by_list: dict[str, list[Task]] = {}
     for task in tasks:
         by_list.setdefault(task.list_id, []).append(task)
@@ -74,7 +78,9 @@ def order_tree(tasks: list[Task]) -> list[tuple[Task, int]]:
 
 
 def due_today(tasks: list[Task], today: _dt.date) -> list[Task]:
-    """Open overdue/today tasks, plus tasks completed today, across lists."""
+    """
+    Open overdue/today tasks, plus tasks completed today, across lists.
+    """
     rows = [
         t
         for t in tasks
@@ -87,7 +93,9 @@ def due_today(tasks: list[Task], today: _dt.date) -> list[Task]:
 
 
 def due_on(tasks: list[Task], day: _dt.date) -> list[Task]:
-    """Open tasks due on a specific day, across lists."""
+    """
+    Open tasks due on a specific day, across lists.
+    """
     rows = [t for t in tasks if t.due == day and not t.deleted and not t.done]
     rows.sort(key=lambda t: t.list_title)
     return rows

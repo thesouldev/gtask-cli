@@ -17,7 +17,7 @@ from . import dates, store, view
 
 app = typer.Typer(
     add_completion=False,
-    no_args_is_help=True,
+    invoke_without_command=True,
     help="Manage Google Tasks from the terminal.",
 )
 lists_app = typer.Typer(help="Manage task lists.")
@@ -25,6 +25,18 @@ app.add_typer(lists_app, name="lists")
 
 console = Console()
 err = Console(stderr=True)
+
+
+@app.callback(invoke_without_command=True)
+def _default(ctx: typer.Context):
+    """
+    Open the interactive TUI when no subcommand is given.
+    """
+    if ctx.invoked_subcommand is not None:
+        return
+    from .tui import run
+
+    run()
 
 
 def _client():
@@ -70,7 +82,9 @@ def _lookup(n: int) -> dict:
 
 
 def _gather(g, list_name, show_done, show_deleted):
-    """Collect tasks from one named list or all lists."""
+    """
+    Collect tasks from one named list or all lists.
+    """
     target = [_require_list(g, list_name)] if list_name else g.tasklists()
     tasks = []
     for tl in target:
@@ -86,7 +100,9 @@ def _gather(g, list_name, show_done, show_deleted):
 
 
 def _ordered(tasks, full, today):
-    """Default view is today and overdue, flat. Full view is the tree."""
+    """
+    Default view is today and overdue, flat. Full view is the tree.
+    """
     if full:
         return view.order_tree(tasks)
     due_open = [
@@ -97,7 +113,9 @@ def _ordered(tasks, full, today):
 
 
 def _cache(ordered):
-    """Remember the numbering so done/rm/edit/move can resolve a number."""
+    """
+    Remember the numbering so done/rm/edit/move can resolve a number.
+    """
     store.save(
         [
             {

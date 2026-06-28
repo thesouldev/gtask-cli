@@ -1,0 +1,112 @@
+/* gruvbox-dark surfaces for the gtask TUI */
+
+Screen {
+    background: #1d2021;
+    color: #ebdbb2;
+}
+
+#body {
+    height: 1fr;
+}
+
+#sidebar {
+    width: 28;
+    background: #1d2021;
+    border: round #504945;
+    border-title-color: #928374;
+    padding: 0 1;
+}
+
+#sidebar:focus {
+    border: round #fabd2f;
+    border-title-color: #fabd2f;
+}
+
+#sidebar > .option-list--option-highlighted {
+    background: #3c3836;
+}
+
+#right {
+    width: 1fr;
+    border: round #504945;
+    border-title-color: #928374;
+    padding: 0 1;
+}
+
+#right:focus-within {
+    border: round #fabd2f;
+    border-title-color: #fabd2f;
+}
+
+#summary {
+    height: 1;
+    padding: 0 1;
+}
+
+#tasks {
+    height: 1fr;
+    background: #1d2021;
+}
+
+#tasks > .datatable--header {
+    background: #1d2021;
+    color: #665c54;
+}
+
+#tasks > .datatable--cursor {
+    background: #3c3836;
+    color: #fbf1c7;
+}
+
+#empty {
+    height: 1fr;
+    content-align: center middle;
+}
+
+#hints {
+    height: 1;
+    background: #282828;
+    padding: 0 1;
+}
+
+#search {
+    dock: bottom;
+    border: round #fabd2f;
+    background: #282828;
+}
+
+/* modal overlays */
+TaskForm, HelpScreen, DetailScreen {
+    align: center middle;
+}
+
+#form, #help, #detail {
+    width: 72;
+    height: auto;
+    max-height: 90%;
+    background: #282828;
+    border: round #fabd2f;
+    padding: 1 2;
+}
+
+#form Input {
+    margin: 1 0;
+}
+
+#form-buttons {
+    height: auto;
+    align: right middle;
+}
+
+#form-buttons Button {
+    margin: 0 0 0 2;
+}
+
+#detail-title {
+    text-style: bold;
+    padding: 0 0 1 0;
+}
+
+.section {
+    padding: 1 0 0 0;
+}

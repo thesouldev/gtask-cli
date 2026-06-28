@@ -66,6 +66,12 @@ class Task:
     def done(self) -> bool:
         return self.status == "completed"
 
+    def mark(self, done: bool) -> None:
+        """
+        Set completion locally so the UI can update before the API call.
+        """
+        self._raw["status"] = "completed" if done else "needsAction"
+
 
 class GTasks:
     """
@@ -78,7 +84,6 @@ class GTasks:
             "tasks", "v1", credentials=creds, cache_discovery=False
         )
 
-    # --- lists ---
     def tasklists(self) -> list[dict]:
         items: list[dict] = []
         page = None
@@ -114,7 +119,6 @@ class GTasks:
     def delete_list(self, list_id: str) -> None:
         self._svc.tasklists().delete(tasklist=list_id).execute()
 
-    # --- tasks ---
     def list_tasks(
         self,
         list_id: str,
