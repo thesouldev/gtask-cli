@@ -13,7 +13,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, HorizontalScroll, Vertical
 from textual.message import Message
 from textual.screen import ModalScreen
-from textual.widgets import Static
+from textual.widgets import Input, Static
 
 from . import dates, view
 from .client import Task
@@ -372,3 +372,14 @@ class HelpScreen(ModalScreen):
 
     def action_close(self) -> None:
         self.dismiss(None)
+
+
+class SearchInput(Input):
+    """
+    Filter box for the tasks pane; Escape clears and hides it.
+    """
+
+    BINDINGS = [Binding("escape", "cancel", show=False)]
+
+    def action_cancel(self) -> None:
+        self.app.close_search(clear=True)

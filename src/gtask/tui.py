@@ -40,6 +40,7 @@ from .tui_widgets import (
     DueField,
     HelpScreen,
     ListChooser,
+    SearchInput,
     parse_due_input,
 )
 
@@ -94,6 +95,22 @@ class TaskTable(DataTable):
         Binding("d", "delete", show=False),
     ]
 
+    def action_cursor_up(self) -> None:
+        if not self.row_count:
+            return
+        if self.cursor_row == 0:
+            self.move_cursor(row=self.row_count - 1)
+        else:
+            super().action_cursor_up()
+
+    def action_cursor_down(self) -> None:
+        if not self.row_count:
+            return
+        if self.cursor_row >= self.row_count - 1:
+            self.move_cursor(row=0)
+        else:
+            super().action_cursor_down()
+
     def action_top(self) -> None:
         if self.row_count:
             self.move_cursor(row=0)
@@ -113,17 +130,6 @@ class TaskTable(DataTable):
 
     def action_delete(self) -> None:
         self.app.delete_current()
-
-
-class SearchInput(Input):
-    """
-    Filter box for the tasks pane; Escape clears and hides it.
-    """
-
-    BINDINGS = [Binding("escape", "cancel", show=False)]
-
-    def action_cancel(self) -> None:
-        self.app.close_search(clear=True)
 
 
 class TaskForm(ModalScreen):
