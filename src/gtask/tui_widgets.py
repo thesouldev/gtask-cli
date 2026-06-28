@@ -10,11 +10,13 @@ from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, HorizontalScroll
+from textual.containers import Horizontal, HorizontalScroll, Vertical
 from textual.message import Message
+from textual.screen import ModalScreen
 from textual.widgets import Static
 
-from . import dates
+from . import dates, view
+from .client import Task
 
 # gruvbox palette, by role.
 FG = "#ebdbb2"
@@ -38,6 +40,42 @@ def parse_due_input(value: str, today: _dt.date) -> _dt.date | None:
     if text in ("none", "no", "-"):
         return None
     return dates.parse_due(value, today)
+
+
+class ConfirmDelete(ModalScreen):
+    """
+    A small red confirmation box; dismisses True to delete, False to cancel.
+    """
+
+    BINDINGS = [
+        Binding("enter", "confirm", show=False),
+        Binding("escape", "cancel", show=False),
+        Binding("q", "cancel", show=False),
+    ]
+
+    def __init__(self, title: str, body: str) -> None:
+        super().__init__()
+        self._title = title
+        self._body = body
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="confirm"):
+            yield Static(Text(self._title, style=f"bold {RED}"))
+            yield Static(Text(self._body, style=FAINT), classes="confirm-body")
+            yield Static(
+                Text.assemble(
+                    ("Enter", RED),
+                    (" delete · ", FAINT),
+                    ("Esc", FAINT),
+                    (" cancel", FAINT),
+                )
+            )
+
+    def action_confirm(self) -> None:
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
 
 
 class Chip(Static):
@@ -230,3 +268,107 @@ class DueField(Horizontal):
             text, style = "→ ?", RED
         self.query_one("#due_preview", Static).update(Text(text, style=style))
         self.post_message(self.Changed())
+
+
+def _kv(label: str, value: Text) -> Text:
+    line = Text()
+    line.append(f"{label:<9}", style=FAINT)
+    line.append_text(value)
+    return line
+
+
+class DetailScreen(ModalScreen):
+    """
+    Read a single task in full, with its notes and links.
+    """
+
+    BINDINGS = [
+        Binding("q", "close", "Back"),
+        Binding("escape", "close", show=False),
+        Binding("e", "edit", "Edit"),
+        Binding("space", "done", "Toggle done"),
+        Binding("x", "done", show=False),
+        Binding("o", "open", "Open link"),
+    ]
+
+    def __init__(self, task: Task, today) -> None:
+        super().__init__()
+        self._task_obj = task
+        self._today = today
+
+    def compose(self) -> ComposeResult:
+        task = self._task_obj
+        head = Text()
+        head.append("[x] " if task.done else "[ ] ", style=AQUA)
+        head.append(task.title, style=FG)
+
+        rows = [
+            _kv("list", Text(task.list_title, style=AQUA)),
+            _kv("status", Text(task.status, style=BLUE)),
+            _kv(
+                "due",
+                Text(view.due_label(task.due, self._today), style=YELLOW),
+            ),
+        ]
+        notes = task.notes or "(no notes)"
+        url = view.first_url(task.notes, task.web_view_link)
+        hint = f"o  open {url}" if url else "no link in this task"
+
+        with Vertical(id="detail"):
+            yield Static(head, id="detail-title")
+            for row in rows:
+                yield Static(row)
+            yield Static(Text("notes", style=FAINT), classes="section")
+            yield Static(Text(notes, style="#d5c4a1"))
+            yield Static(Text(hint, style=BLUE), classes="section")
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+    def action_edit(self) -> None:
+        self.dismiss("edit")
+
+    def action_done(self) -> None:
+        self.dismiss("done")
+
+    def action_open(self) -> None:
+        self.app.open_current_link()
+
+
+class HelpScreen(ModalScreen):
+    """
+    The keymap, mirrored from the footer hint bar.
+    """
+
+    BINDINGS = [
+        Binding("question_mark", "close", show=False),
+        Binding("q", "close", show=False),
+        Binding("escape", "close", show=False),
+    ]
+
+    ROWS = [
+        ("Tab / ⇧Tab", "switch pane"),
+        ("j / k", "down / up"),
+        ("g / G", "top / bottom"),
+        ("Enter", "open detail / list"),
+        ("Space", "toggle done"),
+        ("o", "open URL in browser"),
+        ("a", "add task / new list"),
+        ("e", "edit task / rename list"),
+        ("d / x", "delete task / list"),
+        ("/", "search"),
+        ("r", "refresh"),
+        ("? / q", "help / quit"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="help"):
+            yield Static(Text("Keyboard", style=f"bold {YELLOW}"))
+            for key, desc in self.ROWS:
+                line = Text()
+                line.append(f"{key:<13}", style=BLUE)
+                line.append(desc, style=FG)
+                yield Static(line)
+
+    def action_close(self) -> None:
+        self.dismiss(None)

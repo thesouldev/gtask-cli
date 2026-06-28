@@ -10,7 +10,7 @@ Screen {
 }
 
 #sidebar {
-    width: 28;
+    width: 34;
     background: #1d2021;
     border: round #504945;
     border-title-color: #928374;
@@ -76,7 +76,7 @@ Screen {
 }
 
 /* centered modal overlays */
-HelpScreen, DetailScreen {
+HelpScreen, DetailScreen, ConfirmDelete {
     align: center middle;
 }
 
@@ -87,6 +87,18 @@ HelpScreen, DetailScreen {
     background: #282828;
     border: round #fabd2f;
     padding: 1 2;
+}
+
+#confirm {
+    width: 54;
+    height: auto;
+    background: #282828;
+    border: round #fb4934;
+    padding: 1 2;
+}
+
+.confirm-body {
+    padding: 1 0;
 }
 
 #detail-title {

@@ -35,7 +35,10 @@ from .tui_widgets import (
     FG,
     RED,
     YELLOW,
+    ConfirmDelete,
+    DetailScreen,
     DueField,
+    HelpScreen,
     ListChooser,
     parse_due_input,
 )
@@ -55,6 +58,24 @@ class Sidebar(OptionList):
         Binding("G", "last", show=False),
     ]
 
+    def on_key(self, event: events.Key) -> None:
+        # While focused, a/e/x manage lists; during an inline edit every key
+        # feeds the buffer. Consume the event so navigation bindings and the
+        # global add shortcut stay clear.
+        app = self.app
+        if app.list_editing:
+            app.list_edit_key(event)
+        elif event.key == "a":
+            app.start_new_list()
+        elif event.key == "e":
+            app.start_rename_list()
+        elif event.key == "x":
+            app.start_delete_list()
+        else:
+            return
+        event.stop()
+        event.prevent_default()
+
 
 class TaskTable(DataTable):
     """
@@ -70,6 +91,7 @@ class TaskTable(DataTable):
         Binding("x", "toggle_done", show=False),
         Binding("o", "open_link", show=False),
         Binding("e", "edit", show=False),
+        Binding("d", "delete", show=False),
     ]
 
     def action_top(self) -> None:
@@ -89,6 +111,9 @@ class TaskTable(DataTable):
     def action_edit(self) -> None:
         self.app.edit_current()
 
+    def action_delete(self) -> None:
+        self.app.delete_current()
+
 
 class SearchInput(Input):
     """
@@ -99,109 +124,6 @@ class SearchInput(Input):
 
     def action_cancel(self) -> None:
         self.app.close_search(clear=True)
-
-
-def _kv(label: str, value: Text) -> Text:
-    line = Text()
-    line.append(f"{label:<9}", style=FAINT)
-    line.append_text(value)
-    return line
-
-
-class DetailScreen(ModalScreen):
-    """
-    Read a single task in full, with its notes and links.
-    """
-
-    BINDINGS = [
-        Binding("q", "close", "Back"),
-        Binding("escape", "close", show=False),
-        Binding("e", "edit", "Edit"),
-        Binding("space", "done", "Toggle done"),
-        Binding("x", "done", show=False),
-        Binding("o", "open", "Open link"),
-    ]
-
-    def __init__(self, task: Task, today: _dt.date) -> None:
-        super().__init__()
-        self._task_obj = task
-        self._today = today
-
-    def compose(self) -> ComposeResult:
-        task = self._task_obj
-        head = Text()
-        head.append("[x] " if task.done else "[ ] ", style=AQUA)
-        head.append(task.title, style=FG)
-
-        rows = [
-            _kv("list", Text(task.list_title, style=AQUA)),
-            _kv("status", Text(task.status, style=BLUE)),
-            _kv(
-                "due",
-                Text(view.due_label(task.due, self._today), style=YELLOW),
-            ),
-        ]
-        notes = task.notes or "(no notes)"
-        url = view.first_url(task.notes, task.web_view_link)
-        hint = f"o  open {url}" if url else "no link in this task"
-
-        with Vertical(id="detail"):
-            yield Static(head, id="detail-title")
-            for row in rows:
-                yield Static(row)
-            yield Static(Text("notes", style=FAINT), classes="section")
-            yield Static(Text(notes, style="#d5c4a1"))
-            yield Static(Text(hint, style=BLUE), classes="section")
-
-    def action_close(self) -> None:
-        self.dismiss(None)
-
-    def action_edit(self) -> None:
-        self.dismiss("edit")
-
-    def action_done(self) -> None:
-        self.dismiss("done")
-
-    def action_open(self) -> None:
-        self.app.open_current_link()
-
-
-class HelpScreen(ModalScreen):
-    """
-    The keymap, mirrored from the footer hint bar.
-    """
-
-    BINDINGS = [
-        Binding("question_mark", "close", show=False),
-        Binding("q", "close", show=False),
-        Binding("escape", "close", show=False),
-    ]
-
-    ROWS = [
-        ("Tab / ⇧Tab", "switch pane"),
-        ("j / k", "down / up"),
-        ("g / G", "top / bottom"),
-        ("Enter", "open detail"),
-        ("Space / x", "toggle done"),
-        ("o", "open URL in browser"),
-        ("a", "add task"),
-        ("e", "edit task"),
-        ("/", "search"),
-        ("r", "refresh"),
-        ("? / q", "help / quit"),
-    ]
-
-    def compose(self) -> ComposeResult:
-        with Vertical(id="help"):
-            yield Static(Text("Keyboard", style=f"bold {YELLOW}"))
-            for key, desc in self.ROWS:
-                line = Text()
-                line.append(f"{key:<13}", style=BLUE)
-                line.append(desc, style=FG)
-                yield Static(line)
-
-    def action_close(self) -> None:
-        self.dismiss(None)
 
 
 class TaskForm(ModalScreen):
@@ -219,18 +141,22 @@ class TaskForm(ModalScreen):
         self._lists = lists
         self._today = today
         self._task_obj = task
-        self._fields = ["title", "notes", "due"]
+        self._fields = ["title", "notes", "due", "list"]
         self.due_field = DueField(today, self._due_default())
-        self.chooser: ListChooser | None = None
-        if task is None:
-            self._fields.append("list")
-            self.chooser = ListChooser(lists, default_list_id)
+        start = task.list_id if task else default_list_id
+        self.chooser = ListChooser(lists, start)
 
     def _due_default(self) -> str:
         if self._task_obj is None:
             return "today"
         due = self._task_obj.due
-        return due.strftime("%d-%m-%Y") if due else "none"
+        if due is None:
+            return "none"
+        if due == self._today:
+            return "today"
+        if due == self._today + _dt.timedelta(days=1):
+            return "tomorrow"
+        return due.strftime("%d-%m-%Y")
 
     def compose(self) -> ComposeResult:
         editing = self._task_obj is not None
@@ -264,8 +190,7 @@ class TaskForm(ModalScreen):
                 ),
             )
             yield self._row("due", self.due_field)
-            if self.chooser is not None:
-                yield self._row("list", self.chooser)
+            yield self._row("list", self.chooser)
             with Horizontal(classes="form-foot"):
                 yield Static(id="foot_status")
                 yield Static(
@@ -291,7 +216,8 @@ class TaskForm(ModalScreen):
         )
 
     def on_list_chooser_changed(self, _event: ListChooser.Changed) -> None:
-        self.query_one("#form_title", Static).update(self._header(False))
+        if self._task_obj is None:
+            self.query_one("#form_title", Static).update(self._header(False))
         self._refresh_status()
 
     def _row(self, name: str, *content) -> Horizontal:
@@ -330,16 +256,25 @@ class TaskForm(ModalScreen):
         self._refresh_status()
 
     def _refresh_status(self) -> None:
-        if self.chooser is None:
-            return
-        status = Text.assemble(
-            ("type a title, hit ", FAINT),
-            ("Enter", AQUA),
-            (" → saved to ", FAINT),
-            (self._list_name(self.chooser.value), AQUA),
-            (" · ", FAINT),
-            (self.due_field.value(), YELLOW),
-        )
+        target = self._list_name(self.chooser.value)
+        due = self.due_field.value()
+        if self._task_obj is None:
+            status = Text.assemble(
+                ("type a title, hit ", FAINT),
+                ("Enter", AQUA),
+                (" → saved to ", FAINT),
+                (target, AQUA),
+                (" · ", FAINT),
+                (due, YELLOW),
+            )
+        else:
+            status = Text.assemble(
+                ("Enter", AQUA),
+                (" → ", FAINT),
+                (target, AQUA),
+                (" · ", FAINT),
+                (due, YELLOW),
+            )
         self.query_one("#foot_status", Static).update(status)
 
     def action_cancel(self) -> None:
@@ -359,15 +294,12 @@ class TaskForm(ModalScreen):
         except ValueError as exc:
             self.app.notify(f"Bad date: {exc}", severity="warning")
             return
-        list_id = (
-            self._task_obj.list_id if self._task_obj else self.chooser.value
-        )
         self.dismiss(
             {
                 "title": title,
                 "notes": self.query_one("#f_notes", Input).value.strip(),
                 "due": due,
-                "list_id": list_id,
+                "list_id": self.chooser.value,
             }
         )
 
@@ -402,6 +334,9 @@ class GTaskTUI(App):
         self.rows: list[Task] = []
         self._option_ids: list[str] = []
         self._filter = ""
+        self._list_edit: str | None = None  # None | "new" | "rename"
+        self._list_target: str | None = None
+        self._list_buffer = ""
 
         self.sidebar = Sidebar(id="sidebar")
         self.sidebar.border_title = "Lists"
@@ -460,11 +395,14 @@ class GTaskTUI(App):
             )
             self.tasks_by_list[list_id] = tasks
             self.list_colors[list_id] = view.list_color(index)
-        if self.current_view is None:
+        if self.current_view is None or (
+            self.current_view[0] == "list"
+            and self.current_view[1] not in self.tasks_by_list
+        ):
             self.current_view = ("smart", "today")
         self._build_sidebar()
         self._refresh_view()
-        if not self.table.has_focus:
+        if not self.table.has_focus and not self.sidebar.has_focus:
             self.table.focus()
 
     @property
@@ -489,13 +427,32 @@ class GTaskTUI(App):
             ),
             None,
         ]
-        options.extend(self._list_option(item) for item in self.lists)
+        for item in self.lists:
+            if self._list_edit == "rename" and self._list_target == item["id"]:
+                options.append(self._edit_row(item["id"]))
+            else:
+                options.append(self._list_option(item))
+        if self._list_edit == "new":
+            options.append(self._edit_row(None))
+        else:
+            options.append(
+                Option(Text("  ＋ New list", style=FAINT), id="action:new")
+            )
         self._option_ids = [
             opt.id for opt in options if isinstance(opt, Option)
         ]
         self.sidebar.clear_options()
         self.sidebar.add_options(options)
-        self._highlight_current()
+        self._highlight_sidebar()
+
+    def _edit_row(self, list_id: str | None) -> Option:
+        color = self.list_colors.get(list_id, YELLOW) if list_id else YELLOW
+        text = Text()
+        text.append("▎", style=YELLOW)
+        text.append(" ● ", style=color)
+        text.append(f" {self._list_buffer}█ ", style="#fbf1c7 on #504945")
+        oid = f"list:{list_id}" if list_id else "action:new"
+        return Option(text, id=oid)
 
     def _smart_option(self, key, mark, color, name, count) -> Option:
         return Option(
@@ -522,9 +479,14 @@ class GTaskTUI(App):
         text.append(f"{count:>2}", style=DIM)
         return text
 
-    def _highlight_current(self) -> None:
-        kind, value = self.current_view
-        target = f"{kind}:{value}"
+    def _highlight_sidebar(self) -> None:
+        if self._list_edit == "new":
+            target = "action:new"
+        elif self._list_edit == "rename":
+            target = f"list:{self._list_target}"
+        else:
+            kind, value = self.current_view
+            target = f"{kind}:{value}"
         if target in self._option_ids:
             self.sidebar.highlighted = self._option_ids.index(target)
 
@@ -536,13 +498,18 @@ class GTaskTUI(App):
     def on_option_list_option_selected(
         self, event: OptionList.OptionSelected
     ) -> None:
+        if event.option_id == "action:new":
+            self.start_new_list()
+            return
         self._select_view(event.option_id)
         self.table.focus()
 
     def _select_view(self, option_id: str | None) -> None:
-        if not option_id:
+        if self._list_edit or not option_id:
             return
         kind, value = option_id.split(":", 1)
+        if kind not in ("smart", "list"):
+            return
         new_view = (kind, value)
         if new_view == self.current_view:
             return
@@ -560,13 +527,19 @@ class GTaskTUI(App):
             self.view_rows = view.due_on(self._all_tasks, day)
             title = "Tomorrow"
         else:
-            open_tasks = [
-                t
-                for t in self.tasks_by_list.get(value, [])
-                if not t.done and not t.deleted
+            tasks = [
+                t for t in self.tasks_by_list.get(value, []) if not t.deleted
             ]
-            self.view_rows = [t for t, _ in view.order_tree(open_tasks)]
+            open_rows = [
+                t for t, _ in view.order_tree([t for t in tasks if not t.done])
+            ]
+            done_rows = sorted(
+                (t for t in tasks if t.done), key=lambda t: t.position
+            )
+            self.view_rows = open_rows + done_rows
             title = self._list_title(value)
+        # Completed tasks always sink to the bottom (stable within groups).
+        self.view_rows.sort(key=lambda t: t.done)
         self.right.border_title = title
         self._refresh_table()
 
@@ -695,6 +668,16 @@ class GTaskTUI(App):
             return
         done = not task.done
         task.mark(done)
+        if task in self.view_rows:
+            self.view_rows.remove(task)
+            if done:
+                self.view_rows.append(task)
+            else:
+                first_done = next(
+                    (i for i, t in enumerate(self.view_rows) if t.done),
+                    len(self.view_rows),
+                )
+                self.view_rows.insert(first_done, task)
         self._refresh_table()
         self._build_sidebar()
         self._write_done(task.list_id, task.id, done)
@@ -750,6 +733,124 @@ class GTaskTUI(App):
         kind, value = self.current_view
         return value if kind == "list" else None
 
+    def delete_current(self) -> None:
+        task = self._current_task()
+        if not task:
+            return
+        self.push_screen(
+            ConfirmDelete(
+                f'Delete "{task.title}"?',
+                "This removes the task from Google Tasks.",
+            ),
+            lambda ok: self._delete_task(task) if ok else None,
+        )
+
+    @work(thread=True)
+    def _delete_task(self, task: Task) -> None:
+        svc = self._service()
+        try:
+            svc.delete_task(task.list_id, task.id)
+            self._reload_list(svc, task.list_id)
+        except Exception as exc:  # pylint: disable=broad-except
+            self.call_from_thread(
+                self.notify, f"Delete failed: {exc}", severity="error"
+            )
+
+    @property
+    def list_editing(self) -> bool:
+        return self._list_edit is not None
+
+    def _selected_list(self) -> dict | None:
+        index = self.sidebar.highlighted
+        if index is None or index >= len(self._option_ids):
+            return None
+        oid = self._option_ids[index]
+        if oid.startswith("list:"):
+            list_id = oid.split(":", 1)[1]
+            return next((x for x in self.lists if x["id"] == list_id), None)
+        return None
+
+    def start_new_list(self) -> None:
+        self._list_edit = "new"
+        self._list_target = None
+        self._list_buffer = ""
+        self.sidebar.focus()
+        self._build_sidebar()
+        self._update_hints()
+
+    def start_rename_list(self) -> None:
+        item = self._selected_list()
+        if not item:
+            self.notify("Pick a list to rename", severity="warning")
+            return
+        self._list_edit = "rename"
+        self._list_target = item["id"]
+        self._list_buffer = item["title"]
+        self._build_sidebar()
+        self._update_hints()
+
+    def start_delete_list(self) -> None:
+        item = self._selected_list()
+        if not item:
+            self.notify("Pick a list to delete", severity="warning")
+            return
+        count = sum(
+            1 for t in self.tasks_by_list.get(item["id"], []) if not t.deleted
+        )
+        self.push_screen(
+            ConfirmDelete(
+                f'Delete "{item["title"]}"?',
+                f"The list and its {count} tasks will be removed.",
+            ),
+            lambda ok: self._list_op("delete", item["id"], "") if ok else None,
+        )
+
+    def list_edit_key(self, event: events.Key) -> None:
+        if event.key == "enter":
+            self._commit_list_edit()
+        elif event.key == "escape":
+            self._end_list_edit()
+        elif event.key == "backspace":
+            self._list_buffer = self._list_buffer[:-1]
+            self._build_sidebar()
+        elif event.character and event.character.isprintable():
+            self._list_buffer += event.character
+            self._build_sidebar()
+
+    def _commit_list_edit(self) -> None:
+        name = self._list_buffer.strip()
+        kind, target = self._list_edit, self._list_target
+        self._end_list_edit()
+        if not name:
+            self.notify("Name can't be empty", severity="warning")
+            return
+        self._list_op(kind, target, name)
+
+    def _end_list_edit(self) -> None:
+        self._list_edit = None
+        self._list_target = None
+        self._list_buffer = ""
+        self._build_sidebar()
+        self._update_hints()
+
+    @work(thread=True)
+    def _list_op(self, kind: str, list_id: str | None, name: str) -> None:
+        svc = self._service()
+        try:
+            if kind == "new":
+                svc.create_list(name)
+            elif kind == "rename":
+                svc.rename_list(list_id, name)
+            elif kind == "delete":
+                svc.delete_list(list_id)
+            bundles = self._load_all(svc)
+        except Exception as exc:  # pylint: disable=broad-except
+            self.call_from_thread(
+                self.notify, f"List {kind} failed: {exc}", severity="error"
+            )
+            return
+        self.call_from_thread(self._apply, bundles)
+
     @work(thread=True)
     def _create(self, data) -> None:
         svc = self._service()
@@ -774,6 +875,11 @@ class GTaskTUI(App):
                 notes=data["notes"],
                 due=data["due"],
             )
+            if data["list_id"] != task.list_id:
+                svc.move_task(
+                    task.list_id, task.id, destination=data["list_id"]
+                )
+                self._reload_list(svc, data["list_id"])
             self._reload_list(svc, task.list_id)
         except Exception as exc:  # pylint: disable=broad-except
             self.call_from_thread(
@@ -825,22 +931,49 @@ class GTaskTUI(App):
     def action_help(self) -> None:
         self.push_screen(HelpScreen())
 
+    def on_descendant_focus(self, _event: events.DescendantFocus) -> None:
+        self._update_hints()
+
+    def _update_hints(self) -> None:
+        if self.list_editing:
+            mode = "edit"
+        elif self.sidebar.has_focus:
+            mode = "lists"
+        else:
+            mode = "tasks"
+        self.query_one("#hints", Static).update(self._hint_bar(mode))
+
     @staticmethod
-    def _hint_bar() -> Text:
-        pairs = [
-            ("Tab", "panes"),
-            ("j/k", "move"),
-            ("Enter", "open"),
-            ("Space", "done"),
-            ("o", "link"),
-            ("a", "add"),
-            ("e", "edit"),
-            ("/", "search"),
-            ("?", "help"),
-            ("q", "quit"),
-        ]
+    def _hint_bar(mode: str = "tasks") -> Text:
+        rows = {
+            "tasks": [
+                ("Tab", "panes"),
+                ("j/k", "move"),
+                ("Enter", "open"),
+                ("Space", "done"),
+                ("o", "link"),
+                ("a", "add"),
+                ("e", "edit"),
+                ("d", "delete"),
+                ("/", "search"),
+                ("?", "help"),
+                ("q", "quit"),
+            ],
+            "lists": [
+                ("Tab", "panes"),
+                ("j/k", "move"),
+                ("Enter", "open"),
+                ("a", "new list"),
+                ("e", "rename"),
+                ("x", "delete"),
+                ("/", "search"),
+                ("?", "help"),
+                ("q", "quit"),
+            ],
+            "edit": [("Enter", "save"), ("Esc", "cancel")],
+        }
         text = Text()
-        for key, desc in pairs:
+        for key, desc in rows[mode]:
             text.append(f" {key} ", style=YELLOW)
             text.append(f"{desc}  ", style=FAINT)
         return text
