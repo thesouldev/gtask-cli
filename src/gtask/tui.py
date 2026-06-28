@@ -489,7 +489,7 @@ class GTaskTUI(App):
     def _row_text(mark, color, name, count) -> Text:
         text = Text()
         text.append(f"{mark} ", style=color)
-        text.append(f"{name[:13]:<13}", style=FG)
+        text.append(f"{name[:30]:<31}", style=FG)
         text.append(f"{count:>2}", style=DIM)
         return text
 

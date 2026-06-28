@@ -10,7 +10,7 @@ Screen {
 }
 
 #sidebar {
-    width: 34;
+    width: 40;
     background: #1d2021;
     border: round #504945;
     border-title-color: #928374;
