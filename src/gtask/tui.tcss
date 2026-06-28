@@ -151,8 +151,16 @@ HelpScreen, DetailScreen {
     color: #ebdbb2;
 }
 
-#form .inline.due {
-    width: 14;
+.chooser {
+    height: 1;
+    width: 1fr;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-size: 0 0;
+}
+
+.chooser:focus {
+    background: #32302f;
 }
 
 .chip {
@@ -169,14 +177,15 @@ HelpScreen, DetailScreen {
     text-style: bold;
 }
 
-.chooser:focus {
-    background: #32302f;
-}
-
-.arrow, .sep {
+.sep {
     width: auto;
     color: #665c54;
     padding: 0 1 0 0;
+}
+
+.due-value {
+    width: auto;
+    color: #fabd2f;
 }
 
 .preview {

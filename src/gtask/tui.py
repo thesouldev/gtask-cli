@@ -21,38 +21,26 @@ from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.message import Message
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
-from . import dates, view
+from . import view
 from .client import GTasks, Task
-
-# gruvbox palette, by role.
-FG = "#ebdbb2"
-DIM = "#928374"
-FAINT = "#7c6f64"
-RED = "#fb4934"
-YELLOW = "#fabd2f"
-AQUA = "#8ec07c"
-BLUE = "#83a598"
+from .tui_widgets import (
+    AQUA,
+    BLUE,
+    DIM,
+    FAINT,
+    FG,
+    RED,
+    YELLOW,
+    DueField,
+    ListChooser,
+    parse_due_input,
+)
 
 EMPTY_ART = "╰( ◜◡◝ )╯"
-
-
-def parse_due_input(value: str, today: _dt.date) -> _dt.date | None:
-    """
-    Parse the add/edit due field: words, a blank, or the CLI date syntax.
-    """
-    text = (value or "").strip().lower()
-    if text in ("", "today"):
-        return today
-    if text in ("tomorrow", "tmrw", "tom"):
-        return today + _dt.timedelta(days=1)
-    if text in ("none", "no", "-"):
-        return None
-    return dates.parse_due(value, today)
 
 
 class Sidebar(OptionList):
@@ -216,93 +204,6 @@ class HelpScreen(ModalScreen):
         self.dismiss(None)
 
 
-class Chip(Static):
-    """
-    A clickable option in the task form: a due preset or a list name.
-    """
-
-    class Picked(Message):
-        """
-        Posted when a chip is clicked, carrying its group and value.
-        """
-
-        def __init__(self, group: str, value: str) -> None:
-            self.group = group
-            self.value = value
-            super().__init__()
-
-    def __init__(self, label: str, group: str, value: str) -> None:
-        super().__init__(label, classes="chip")
-        self.group = group
-        self.option_value = value
-
-    def on_click(self) -> None:
-        self.post_message(self.Picked(self.group, self.option_value))
-
-
-class ListChooser(Horizontal):
-    """
-    Focusable row of list names; h/l (or ‹ ›) cycles the target list.
-    """
-
-    can_focus = True
-    BINDINGS = [
-        Binding("left", "prev", show=False),
-        Binding("h", "prev", show=False),
-        Binding("right", "next", show=False),
-        Binding("l", "next", show=False),
-    ]
-
-    class Changed(Message):
-        """
-        Posted when the selected list changes, carrying its id.
-        """
-
-        def __init__(self, value: str) -> None:
-            self.value = value
-            super().__init__()
-
-    def __init__(self, lists: list[dict], value: str) -> None:
-        super().__init__(classes="chooser")
-        self._lists = lists
-        self.index = next(
-            (i for i, it in enumerate(lists) if it["id"] == value), 0
-        )
-
-    def compose(self) -> ComposeResult:
-        yield Static("‹ ", classes="arrow")
-        for item in self._lists:
-            yield Chip(item["title"], "list", item["id"])
-        yield Static(" ›", classes="arrow")
-
-    def on_mount(self) -> None:
-        self._sync()
-
-    @property
-    def value(self) -> str:
-        return self._lists[self.index]["id"]
-
-    def action_prev(self) -> None:
-        self.index = (self.index - 1) % len(self._lists)
-        self._sync()
-
-    def action_next(self) -> None:
-        self.index = (self.index + 1) % len(self._lists)
-        self._sync()
-
-    def select(self, list_id: str) -> None:
-        self.index = next(
-            (i for i, it in enumerate(self._lists) if it["id"] == list_id),
-            self.index,
-        )
-        self._sync()
-
-    def _sync(self) -> None:
-        for i, chip in enumerate(self.query(Chip)):
-            chip.set_class(i == self.index, "list-active")
-        self.post_message(self.Changed(self.value))
-
-
 class TaskForm(ModalScreen):
     """
     Add a new task, or edit an existing one, in a docked panel.
@@ -313,18 +214,13 @@ class TaskForm(ModalScreen):
         Binding("enter", "save", show=False),
     ]
 
-    DUE_PRESETS = (
-        ("today", "today"),
-        ("tomorrow", "tomorrow"),
-        ("none", "none"),
-    )
-
     def __init__(self, lists, default_list_id, today, task=None) -> None:
         super().__init__()
         self._lists = lists
         self._today = today
         self._task_obj = task
         self._fields = ["title", "notes", "due"]
+        self.due_field = DueField(today, self._due_default())
         self.chooser: ListChooser | None = None
         if task is None:
             self._fields.append("list")
@@ -367,15 +263,7 @@ class TaskForm(ModalScreen):
                     id="f_notes",
                 ),
             )
-            yield self._row(
-                "due",
-                *(Chip(label, "due", val) for label, val in self.DUE_PRESETS),
-                Static("·", classes="sep"),
-                Input(
-                    value=self._due_default(), classes="inline due", id="f_due"
-                ),
-                Static("", classes="preview", id="due_preview"),
-            )
+            yield self._row("due", self.due_field)
             if self.chooser is not None:
                 yield self._row("list", self.chooser)
             with Horizontal(classes="form-foot"):
@@ -418,7 +306,6 @@ class TaskForm(ModalScreen):
 
     def on_mount(self) -> None:
         self._mark("title")
-        self._refresh_due(self._due_default())
         self._refresh_status()
         self.query_one("#f_title", Input).focus()
 
@@ -426,6 +313,8 @@ class TaskForm(ModalScreen):
         widget = event.widget
         if isinstance(widget, ListChooser):
             self._mark("list")
+        elif isinstance(widget, DueField):
+            self._mark("due")
         elif widget.id and widget.id.startswith("f_"):
             self._mark(widget.id[2:])
 
@@ -437,44 +326,19 @@ class TaskForm(ModalScreen):
                 Text(f"{marker}{name}", style=style)
             )
 
-    def on_input_changed(self, event: Input.Changed) -> None:
-        if event.input.id == "f_due":
-            self._refresh_due(event.value)
-            self._refresh_status()
-
-    def _refresh_due(self, value: str) -> None:
-        word = value.strip().lower()
-        for chip in self.query(Chip):
-            if chip.group == "due":
-                active = chip.option_value == word or (
-                    chip.option_value == "today" and word == ""
-                )
-                chip.set_class(active, "active")
-        try:
-            due = parse_due_input(value, self._today)
-            text = "→ no date" if due is None else f"→ {due:%d %b %Y}"
-            style = FAINT
-        except ValueError:
-            text, style = "→ ?", RED
-        self.query_one("#due_preview", Static).update(Text(text, style=style))
-
-    def on_chip_picked(self, event: Chip.Picked) -> None:
-        if event.group == "due":
-            self.query_one("#f_due", Input).value = event.value
-        elif self.chooser is not None:
-            self.chooser.select(event.value)
+    def on_due_field_changed(self, _event: DueField.Changed) -> None:
+        self._refresh_status()
 
     def _refresh_status(self) -> None:
         if self.chooser is None:
             return
-        due_word = self.query_one("#f_due", Input).value.strip() or "today"
         status = Text.assemble(
             ("type a title, hit ", FAINT),
             ("Enter", AQUA),
             (" → saved to ", FAINT),
             (self._list_name(self.chooser.value), AQUA),
             (" · ", FAINT),
-            (due_word, YELLOW),
+            (self.due_field.value(), YELLOW),
         )
         self.query_one("#foot_status", Static).update(status)
 
@@ -491,9 +355,7 @@ class TaskForm(ModalScreen):
             self.query_one("#f_title", Input).focus()
             return
         try:
-            due = parse_due_input(
-                self.query_one("#f_due", Input).value, self._today
-            )
+            due = parse_due_input(self.due_field.value(), self._today)
         except ValueError as exc:
             self.app.notify(f"Bad date: {exc}", severity="warning")
             return
