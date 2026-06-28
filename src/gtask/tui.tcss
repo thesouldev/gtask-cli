@@ -63,6 +63,14 @@ Screen {
     content-align: center middle;
 }
 
+#celebrate {
+    height: auto;
+    content-align: center middle;
+    border: round #b8bb26;
+    padding: 1 0;
+    margin: 0 0 1 0;
+}
+
 #hints {
     height: 1;
     background: #282828;

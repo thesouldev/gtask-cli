@@ -41,10 +41,11 @@ from .tui_widgets import (
     HelpScreen,
     ListChooser,
     SearchInput,
+    celebration,
+    empty_state,
+    hint_bar,
     parse_due_input,
 )
-
-EMPTY_ART = "╰( ◜◡◝ )╯"
 
 
 class Sidebar(OptionList):
@@ -347,11 +348,15 @@ class GTaskTUI(App):
 
         self.sidebar = Sidebar(id="sidebar")
         self.sidebar.border_title = "Lists"
+        self.celebrate = Static(id="celebrate")
+        self.celebrate.display = False
         self.summary = Static(id="summary")
         self.table = TaskTable(id="tasks", cursor_type="row")
         self.empty = Static(id="empty")
         self.empty.display = False
-        self.right = Vertical(self.summary, self.table, self.empty, id="right")
+        self.right = Vertical(
+            self.celebrate, self.summary, self.table, self.empty, id="right"
+        )
         self.right.border_title = "Today"
         self.search = SearchInput(placeholder="filter…", id="search")
         self.search.display = False
@@ -359,7 +364,7 @@ class GTaskTUI(App):
     def compose(self) -> ComposeResult:
         yield Horizontal(self.sidebar, self.right, id="body")
         yield self.search
-        yield Static(self._hint_bar(), id="hints")
+        yield Static(hint_bar(), id="hints")
 
     def on_mount(self) -> None:
         self.summary.update(Text("Loading…", style=DIM))
@@ -575,12 +580,26 @@ class GTaskTUI(App):
         self.table.add_column("task")
         for index, task in enumerate(self.rows, start=1):
             self.table.add_row(*self._cells(index, task, smart))
+        partying = self._celebrating()
+        self.celebrate.display = partying
+        if partying:
+            self.celebrate.update(celebration(len(self.view_rows)))
         self._update_summary()
         has_rows = bool(self.rows)
         self.table.display = has_rows
-        self.empty.display = not has_rows
+        self.empty.display = not has_rows and not partying
         if not has_rows:
-            self.empty.update(self._empty_text())
+            self.empty.update(
+                empty_state(self.current_view == ("smart", "today"))
+            )
+
+    def _celebrating(self) -> bool:
+        return (
+            self.current_view == ("smart", "today")
+            and not self._filter
+            and bool(self.view_rows)
+            and all(t.done for t in self.view_rows)
+        )
 
     def _matches(self, task: Task) -> bool:
         if not self._filter:
@@ -622,6 +641,9 @@ class GTaskTUI(App):
         return YELLOW
 
     def _update_summary(self) -> None:
+        if self._celebrating():
+            self.summary.update(Text("✓ completed today", style=FAINT))
+            return
         kind, value = self.current_view
         text = Text()
         if kind == "smart" and value == "today":
@@ -642,18 +664,6 @@ class GTaskTUI(App):
         if self._filter:
             text.append(f"   /{self._filter}", style=BLUE)
         self.summary.update(text)
-
-    def _empty_text(self) -> Text:
-        message = (
-            "Nothing due today."
-            if self.current_view == ("smart", "today")
-            else "Nothing here."
-        )
-        text = Text(justify="center")
-        text.append(EMPTY_ART + "\n\n", style=FAINT)
-        text.append(message + "\n", style="#d5c4a1")
-        text.append("Press a to add a task.", style=FAINT)
-        return text
 
     def _current_task(self) -> Task | None:
         index = self.table.cursor_row
@@ -956,42 +966,7 @@ class GTaskTUI(App):
             mode = "lists"
         else:
             mode = "tasks"
-        self.query_one("#hints", Static).update(self._hint_bar(mode))
-
-    @staticmethod
-    def _hint_bar(mode: str = "tasks") -> Text:
-        rows = {
-            "tasks": [
-                ("Tab", "panes"),
-                ("j/k", "move"),
-                ("Enter", "open"),
-                ("Space", "done"),
-                ("o", "link"),
-                ("a", "add"),
-                ("e", "edit"),
-                ("d", "delete"),
-                ("/", "search"),
-                ("?", "help"),
-                ("q", "quit"),
-            ],
-            "lists": [
-                ("Tab", "panes"),
-                ("j/k", "move"),
-                ("Enter", "open"),
-                ("a", "new list"),
-                ("e", "rename"),
-                ("x", "delete"),
-                ("/", "search"),
-                ("?", "help"),
-                ("q", "quit"),
-            ],
-            "edit": [("Enter", "save"), ("Esc", "cancel")],
-        }
-        text = Text()
-        for key, desc in rows[mode]:
-            text.append(f" {key} ", style=YELLOW)
-            text.append(f"{desc}  ", style=FAINT)
-        return text
+        self.query_one("#hints", Static).update(hint_bar(mode))
 
 
 def run() -> None:

@@ -26,6 +26,37 @@ RED = "#fb4934"
 YELLOW = "#fabd2f"
 AQUA = "#8ec07c"
 BLUE = "#83a598"
+GREEN = "#b8bb26"
+
+EMPTY_ART = "╰( ◜◡◝ )╯"
+
+
+def empty_state(is_today: bool) -> Text:
+    """
+    The calm placeholder shown when a view has no tasks at all.
+    """
+    message = "Nothing due today." if is_today else "Nothing here."
+    text = Text(justify="center")
+    text.append(EMPTY_ART + "\n\n", style=FAINT)
+    text.append(message + "\n", style="#d5c4a1")
+    text.append("Press a to add a task.", style=FAINT)
+    return text
+
+
+def celebration(count: int) -> Text:
+    """
+    The reward shown when every task due today has been completed.
+    """
+    text = Text(justify="center")
+    text.append("＼(´▽`)／\n\n", style=GREEN)
+    text.append("All done for today\n\n", style=f"bold {GREEN}")
+    text.append(f"{count} of {count} tasks complete\n", style=GREEN)
+    text.append(
+        "You cleared everything on your plate. Go enjoy the quiet.\n\n",
+        style=FAINT,
+    )
+    text.append("Press a to plan tomorrow.", style=FAINT)
+    return text
 
 
 def parse_due_input(value: str, today: _dt.date) -> _dt.date | None:
@@ -383,3 +414,41 @@ class SearchInput(Input):
 
     def action_cancel(self) -> None:
         self.app.close_search(clear=True)
+
+
+def hint_bar(mode: str = "tasks") -> Text:
+    """
+    The footer key hints; the set shown depends on the focused pane.
+    """
+    rows = {
+        "tasks": [
+            ("Tab", "panes"),
+            ("j/k", "move"),
+            ("Enter", "open"),
+            ("Space", "done"),
+            ("o", "link"),
+            ("a", "add"),
+            ("e", "edit"),
+            ("d", "delete"),
+            ("/", "search"),
+            ("?", "help"),
+            ("q", "quit"),
+        ],
+        "lists": [
+            ("Tab", "panes"),
+            ("j/k", "move"),
+            ("Enter", "open"),
+            ("a", "new list"),
+            ("e", "rename"),
+            ("x", "delete"),
+            ("/", "search"),
+            ("?", "help"),
+            ("q", "quit"),
+        ],
+        "edit": [("Enter", "save"), ("Esc", "cancel")],
+    }
+    text = Text()
+    for key, desc in rows[mode]:
+        text.append(f" {key} ", style=YELLOW)
+        text.append(f"{desc}  ", style=FAINT)
+    return text
