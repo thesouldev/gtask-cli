@@ -7,11 +7,25 @@ are silent. Refreshes automatically when the access token expires.
 
 from __future__ import annotations
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 from . import config
+
+
+def _run_login_flow() -> Credentials:
+    if not config.CREDENTIALS_FILE.exists():
+        raise SystemExit(
+            f"No OAuth client found at {config.CREDENTIALS_FILE}.\n"
+            "Run the one-time setup: enable the Tasks API, create a "
+            "Desktop OAuth client, and save its JSON there."
+        )
+    flow = InstalledAppFlow.from_client_secrets_file(
+        str(config.CREDENTIALS_FILE), config.SCOPES
+    )
+    return flow.run_local_server(port=0)
 
 
 def get_credentials() -> Credentials:
@@ -25,18 +39,13 @@ def get_credentials() -> Credentials:
         return creds
 
     if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except RefreshError:
+            # Cached refresh token was revoked or expired; start over.
+            creds = _run_login_flow()
     else:
-        if not config.CREDENTIALS_FILE.exists():
-            raise SystemExit(
-                f"No OAuth client found at {config.CREDENTIALS_FILE}.\n"
-                "Run the one-time setup: enable the Tasks API, create a "
-                "Desktop OAuth client, and save its JSON there."
-            )
-        flow = InstalledAppFlow.from_client_secrets_file(
-            str(config.CREDENTIALS_FILE), config.SCOPES
-        )
-        creds = flow.run_local_server(port=0)
+        creds = _run_login_flow()
 
     config.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     config.TOKEN_FILE.write_text(creds.to_json())
