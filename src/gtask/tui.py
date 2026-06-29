@@ -191,7 +191,7 @@ class GTaskTUI(App):
 
     def on_mount(self) -> None:
         self.summary.update(Text("Loading…", style=DIM))
-        self.action_refresh()
+        self._reload(announce=False)
 
     def _service(self) -> GTasks:
         if self._svc is None:
@@ -204,8 +204,12 @@ class GTaskTUI(App):
             for tl in svc.tasklists()
         ]
 
-    @work(thread=True, exclusive=True)
     def action_refresh(self) -> None:
+        self.notify("Refreshing…", timeout=1)
+        self._reload(announce=True)
+
+    @work(thread=True, exclusive=True)
+    def _reload(self, announce: bool) -> None:
         try:
             bundles = (
                 self._loader()
@@ -218,6 +222,8 @@ class GTaskTUI(App):
             )
             return
         self.call_from_thread(self._apply, bundles)
+        if announce:
+            self.call_from_thread(self.notify, "Refreshed", timeout=1)
 
     def _apply(self, bundles, select=None) -> None:
         self.lists = []
