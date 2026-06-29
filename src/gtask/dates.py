@@ -31,7 +31,9 @@ def parse_due(s: str, today: _dt.date | None = None) -> _dt.date:
 
 
 def to_rfc3339(d: _dt.date) -> str:
-    """Google Tasks 'due' is a day-level RFC3339 timestamp in UTC."""
+    """
+    Google Tasks 'due' is a day-level RFC3339 timestamp in UTC.
+    """
     return d.strftime("%Y-%m-%dT00:00:00.000Z")
 
 

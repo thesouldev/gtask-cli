@@ -13,11 +13,11 @@ from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
-from . import dates, store
+from . import dates, store, view
 
 app = typer.Typer(
     add_completion=False,
-    no_args_is_help=True,
+    invoke_without_command=True,
     help="Manage Google Tasks from the terminal.",
 )
 lists_app = typer.Typer(help="Manage task lists.")
@@ -27,21 +27,23 @@ console = Console()
 err = Console(stderr=True)
 
 
+@app.callback(invoke_without_command=True)
+def _default(ctx: typer.Context):
+    """
+    Open the interactive TUI when no subcommand is given.
+    """
+    if ctx.invoked_subcommand is not None:
+        return
+    from .tui import run
+
+    run()
+
+
 def _client():
     # Imported lazily so `gtask --help` works without network or credentials.
     from .client import GTasks
 
     return GTasks()
-
-
-def _due_label(due: Optional[_dt.date], today: _dt.date) -> str:
-    if due is None:
-        return ""
-    if due == today:
-        return "today"
-    if due < today:
-        return f"overdue {(today - due).days}d"
-    return due.strftime("%d %b")
 
 
 def _resolve_list(g, name: str, assume_yes: bool = False):
@@ -79,31 +81,10 @@ def _lookup(n: int) -> dict:
     return row
 
 
-def _order_tree(tasks: list) -> list[tuple]:
-    """Order tasks per list as parents followed by their children (depth 1)."""
-    by_list: dict[str, list] = {}
-    for t in tasks:
-        by_list.setdefault(t.list_id, []).append(t)
-
-    ordered: list[tuple] = []
-    for items in by_list.values():
-        ids = {t.id for t in items}
-        children: dict[str, list] = {}
-        tops = []
-        for t in items:
-            if t.parent and t.parent in ids:
-                children.setdefault(t.parent, []).append(t)
-            else:
-                tops.append(t)
-        for top in sorted(tops, key=lambda t: t.position):
-            ordered.append((top, 0))
-            kids = sorted(children.get(top.id, []), key=lambda t: t.position)
-            ordered.extend((kid, 1) for kid in kids)
-    return ordered
-
-
 def _gather(g, list_name, show_done, show_deleted):
-    """Collect tasks from one named list or all lists."""
+    """
+    Collect tasks from one named list or all lists.
+    """
     target = [_require_list(g, list_name)] if list_name else g.tasklists()
     tasks = []
     for tl in target:
@@ -119,9 +100,11 @@ def _gather(g, list_name, show_done, show_deleted):
 
 
 def _ordered(tasks, full, today):
-    """Default view is today and overdue, flat. Full view is the tree."""
+    """
+    Default view is today and overdue, flat. Full view is the tree.
+    """
     if full:
-        return _order_tree(tasks)
+        return view.order_tree(tasks)
     due_open = [
         t for t in tasks if t.due is not None and t.due <= today and not t.done
     ]
@@ -130,7 +113,9 @@ def _ordered(tasks, full, today):
 
 
 def _cache(ordered):
-    """Remember the numbering so done/rm/edit/move can resolve a number."""
+    """
+    Remember the numbering so done/rm/edit/move can resolve a number.
+    """
     store.save(
         [
             {
@@ -173,7 +158,7 @@ def _render(ordered, today):
     table.add_column("Task")
     for n, (t, depth) in enumerate(ordered, start=1):
         overdue = t.due is not None and t.due < today and not t.done
-        due_text = _due_label(t.due, today)
+        due_text = view.due_label(t.due, today)
         due_cell = f"[red]{due_text}[/red]" if overdue else due_text
         title = ("  " * depth) + escape(t.title)
         if t.deleted or t.done:
@@ -219,7 +204,11 @@ def add(
 
     due = _parse_date(date) if date else None
     g.add_task(list_id, text, due, notes, parent=parent_id)
-    when = f"  [dim]({_due_label(due, _dt.date.today())})[/dim]" if due else ""
+    when = (
+        f"  [dim]({view.due_label(due, _dt.date.today())})[/dim]"
+        if due
+        else ""
+    )
     console.print(
         f"Added to [bold]{escape(list_title)}[/bold]: {escape(text)}{when}"
     )
@@ -275,7 +264,7 @@ def show(n: int = typer.Argument(..., help="task number from the last ls")):
     console.print(f"[dim]List:[/dim] {escape(t.list_title)}")
     console.print(f"[dim]Status:[/dim] {t.status}")
     if t.due:
-        console.print(f"[dim]Due:[/dim] {_due_label(t.due, today)}")
+        console.print(f"[dim]Due:[/dim] {view.due_label(t.due, today)}")
     if t.notes:
         console.print(f"[dim]Notes:[/dim] {escape(t.notes)}")
     if t.web_view_link:

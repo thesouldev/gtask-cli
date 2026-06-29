@@ -63,8 +63,25 @@ class Task:
         return dates.from_rfc3339(raw_due) if raw_due else None
 
     @property
+    def completed_date(self) -> _dt.date | None:
+        raw = self._raw.get("completed")
+        return dates.from_rfc3339(raw) if raw else None
+
+    @property
     def done(self) -> bool:
         return self.status == "completed"
+
+    def mark(self, done: bool) -> None:
+        """
+        Set completion locally so the UI can update before the API call,
+        stamping the completion date so a list can hide older done tasks.
+        """
+        if done:
+            self._raw["status"] = "completed"
+            self._raw["completed"] = dates.to_rfc3339(_dt.date.today())
+        else:
+            self._raw["status"] = "needsAction"
+            self._raw.pop("completed", None)
 
 
 class GTasks:
@@ -78,7 +95,6 @@ class GTasks:
             "tasks", "v1", credentials=creds, cache_discovery=False
         )
 
-    # --- lists ---
     def tasklists(self) -> list[dict]:
         items: list[dict] = []
         page = None
@@ -114,7 +130,6 @@ class GTasks:
     def delete_list(self, list_id: str) -> None:
         self._svc.tasklists().delete(tasklist=list_id).execute()
 
-    # --- tasks ---
     def list_tasks(
         self,
         list_id: str,
