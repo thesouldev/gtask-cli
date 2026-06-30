@@ -212,12 +212,12 @@ class ListChooser(HorizontalScroll):
 
 class DueField(Horizontal):
     """
-    Focusable due picker: h/l cycles today / tomorrow / custom. Typing a
-    date switches to custom; an empty custom means no due date.
+    Focusable due picker: h/l cycles today / tomorrow / none / custom.
+    Typing a date switches to custom; none clears the due date.
     """
 
     can_focus = True
-    PRESETS = ("today", "tomorrow", "custom")
+    PRESETS = ("today", "tomorrow", "none", "custom")
     BINDINGS = [
         Binding("left", "prev", show=False),
         Binding("h", "prev", show=False),
@@ -237,11 +237,12 @@ class DueField(Horizontal):
         if initial in ("today", "tomorrow"):
             self.index = self.PRESETS.index(initial)
             self._buffer = ""
+        elif initial in ("", "none", "no", "-"):
+            self.index = self.PRESETS.index("none")
+            self._buffer = ""
         else:
-            self.index = 2
-            self._buffer = (
-                "" if initial in ("", "none", "no", "-") else initial
-            )
+            self.index = self.PRESETS.index("custom")
+            self._buffer = initial
 
     def compose(self) -> ComposeResult:
         for preset in self.PRESETS:
@@ -267,7 +268,7 @@ class DueField(Horizontal):
     def on_key(self, event: events.Key) -> None:
         char = event.character
         if char and (char.isdigit() or char in "-/."):
-            self.index = 2
+            self.index = self.PRESETS.index("custom")
             self._buffer += char
             self._sync()
             event.stop()
