@@ -145,6 +145,9 @@ class ListChooser(HorizontalScroll):
         Binding("h", "prev", show=False),
         Binding("right", "next", show=False),
         Binding("l", "next", show=False),
+        # up/down walk form fields rather than scrolling this row
+        Binding("down", "focus_next", show=False),
+        Binding("up", "focus_previous", show=False),
     ]
 
     class Changed(Message):
@@ -185,6 +188,12 @@ class ListChooser(HorizontalScroll):
     def action_next(self) -> None:
         self.index = (self.index + 1) % len(self._lists)
         self._sync()
+
+    def action_focus_next(self) -> None:
+        self.screen.focus_next()
+
+    def action_focus_previous(self) -> None:
+        self.screen.focus_previous()
 
     def select(self, list_id: str) -> None:
         self.index = next(
@@ -466,6 +475,8 @@ class TaskForm(ModalScreen):
     BINDINGS = [
         Binding("escape", "cancel", show=False),
         Binding("enter", "save", show=False),
+        Binding("down", "focus_next", show=False),
+        Binding("up", "focus_previous", show=False),
     ]
 
     def __init__(
@@ -486,6 +497,12 @@ class TaskForm(ModalScreen):
             else (task.list_id if task else default_list_id)
         )
         self.chooser = ListChooser(lists, start)
+
+    def action_focus_next(self) -> None:
+        self.focus_next()
+
+    def action_focus_previous(self) -> None:
+        self.focus_previous()
 
     def _due_default(self) -> str:
         if self._task_obj is None:
