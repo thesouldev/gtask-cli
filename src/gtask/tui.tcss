@@ -14,7 +14,7 @@ Screen {
     background: #1d2021;
     border: round #504945;
     border-title-color: #928374;
-    padding: 0 1;
+    padding: 0;
 }
 
 #sidebar:focus-within {
@@ -26,7 +26,8 @@ Screen {
     height: 1fr;
     background: #1d2021;
     border: none;
-    padding: 0;
+    padding: 0 1;
+    scrollbar-size: 0 0;
 }
 
 #lists > .option-list--option-highlighted {
@@ -37,6 +38,7 @@ Screen {
     dock: bottom;
     height: 1;
     margin: 1 0 0 0;
+    padding: 0 1;
     color: #7c6f64;
 }
 
@@ -55,16 +57,23 @@ Screen {
 #summary {
     height: 1;
     padding: 0 1;
+    margin: 1 0 0 0;
+}
+
+#rule-top, #rule-bot {
+    height: 1;
+    margin: 0;
+    color: #3c3836;
+}
+
+#thead {
+    height: 1;
+    color: #665c54;
 }
 
 #tasks {
     height: 1fr;
     background: #1d2021;
-}
-
-#tasks > .datatable--header {
-    background: #1d2021;
-    color: #665c54;
 }
 
 #tasks > .datatable--cursor {
@@ -137,7 +146,6 @@ HelpScreen, DetailScreen, ConfirmDelete {
 /* add / edit panel, docked to the bottom */
 #form {
     dock: bottom;
-    width: 1fr;
     height: auto;
     margin: 0 1 1 1;
     background: #282828;

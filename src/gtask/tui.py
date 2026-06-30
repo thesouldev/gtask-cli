@@ -21,7 +21,7 @@ from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import DataTable, Input, OptionList, Static
+from textual.widgets import DataTable, Input, OptionList, Rule, Static
 from textual.widgets.option_list import Option
 
 from . import view
@@ -200,11 +200,26 @@ class GTaskTUI(App):
         self.celebrate = Static(id="celebrate")
         self.celebrate.display = False
         self.summary = Static(id="summary")
-        self.table = TaskTable(id="tasks", cursor_type="row")
+        self.thead = Static(id="thead")
+        self.rule_top = Rule(id="rule-top")
+        self.rule_bot = Rule(id="rule-bot")
+        self.table = TaskTable(
+            id="tasks",
+            cursor_type="row",
+            cell_padding=1,
+            show_header=False,
+        )
         self.empty = Static(id="empty")
         self.empty.display = False
         self.right = Vertical(
-            self.celebrate, self.summary, self.table, self.empty, id="right"
+            self.celebrate,
+            self.summary,
+            self.rule_top,
+            self.thead,
+            self.rule_bot,
+            self.table,
+            self.empty,
+            id="right",
         )
         self.right.border_title = "Today"
         self.search = SearchInput(placeholder="filter…", id="search")
@@ -346,7 +361,7 @@ class GTaskTUI(App):
     def _row_text(mark, color, name, count) -> Text:
         text = Text()
         text.append(f"{mark} ", style=color)
-        text.append(f"{name[:30]:<31}", style=FG)
+        text.append(f"{name[:31]:<32}", style=FG)
         text.append(f"{count:>2}", style=DIM)
         return text
 
@@ -417,37 +432,42 @@ class GTaskTUI(App):
                 return item["title"]
         return "Tasks"
 
+    COLUMNS = (("", 3), ("due", 11), ("list", 10), ("task", 0))
+
     def _refresh_table(self) -> None:
         self.rows = [t for t in self.view_rows if self._matches(t)]
         smart = self.current_view[0] == "smart"
+        columns = [c for c in self.COLUMNS if smart or c[0] != "list"]
         self.table.clear(columns=True)
-        self.table.add_column("#", width=3)
-        self.table.add_column(" ", width=3)
-        self.table.add_column("due", width=11)
-        if smart:
-            self.table.add_column("list", width=10)
-        self.table.add_column("task")
-        number = 0
+        for name, width in columns:
+            self.table.add_column(name, width=width or None)
         for i, task in enumerate(self.rows):
-            if not task.parent:
-                number += 1
             nxt = self.rows[i + 1] if i + 1 < len(self.rows) else None
             last = bool(task.parent) and (
                 nxt is None or nxt.parent != task.parent
             )
-            self.table.add_row(*self._cells(number, task, smart, last))
+            self.table.add_row(*self._cells(task, smart, last))
+        self.thead.update(self._header_text(columns))
         partying = self._celebrating()
         self.celebrate.display = partying
         if partying:
             self.celebrate.update(celebration(len(self.view_rows)))
         self._update_summary()
         has_rows = bool(self.rows)
-        self.table.display = has_rows
+        for widget in (self.thead, self.rule_top, self.rule_bot, self.table):
+            widget.display = has_rows
         self.empty.display = not has_rows and not partying
         if not has_rows:
             self.empty.update(
                 empty_state(self.current_view == ("smart", "today"))
             )
+
+    @staticmethod
+    def _header_text(columns) -> Text:
+        parts = []
+        for label, width in columns:
+            parts.append(f" {label.ljust(width)} " if width else f" {label}")
+        return Text("".join(parts), style=FAINT)
 
     def _celebrating(self) -> bool:
         return (
@@ -465,12 +485,8 @@ class GTaskTUI(App):
             needle in task.title.lower() or needle in task.list_title.lower()
         )
 
-    def _cells(
-        self, number: int, task: Task, smart: bool, last: bool
-    ) -> list[Text]:
+    def _cells(self, task: Task, smart: bool, last: bool) -> list[Text]:
         sub = bool(task.parent)
-        mark = ("└" if last else "├") if sub else str(number)
-        num = Text(mark, style=FAINT, justify="right")
         box = Text(
             "[x]" if task.done else "[ ]", style=DIM if task.done else FAINT
         )
@@ -478,13 +494,17 @@ class GTaskTUI(App):
             "" if sub else view.due_label(task.due, self._today),
             style=self._due_style(task),
         )
-        title = Text(task.title, style=DIM if task.done else FG)
+        title = Text()
+        if sub:
+            title.append(("└ " if last else "├ "), style=FAINT)
+        name = Text(task.title, style=DIM if task.done else FG)
         if task.done:
-            title.stylize("strike")
+            name.stylize("strike")
+        title.append_text(name)
         title = self._with_badge(task, sub, title)
         if view.first_url(task.notes, task.web_view_link):
             title.append("  ↗", style=BLUE)
-        cells = [num, box, due]
+        cells = [box, due]
         if smart:
             color = self.list_colors.get(task.list_id, AQUA)
             cells.append(Text("" if sub else task.list_title, style=color))
@@ -527,9 +547,11 @@ class GTaskTUI(App):
                 1 for t in self.rows if not t.done and t.due == self._today
             )
             done = sum(1 for t in self.rows if t.done)
-            text.append(f"{overdue} overdue  ", style=RED)
-            text.append(f"{due} due  ", style=YELLOW)
-            text.append(f"· {done} done", style=DIM)
+            text.append(f"{overdue} overdue", style=RED)
+            text.append("  ·  ", style=DIM)
+            text.append(f"{due} due", style=YELLOW)
+            text.append("  ·  ", style=DIM)
+            text.append(f"{done} done", style=DIM)
         else:
             text.append(f"{len(self.rows)} open", style=DIM)
         if self._filter:
