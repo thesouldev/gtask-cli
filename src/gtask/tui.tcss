@@ -17,13 +17,27 @@ Screen {
     padding: 0 1;
 }
 
-#sidebar:focus {
+#sidebar:focus-within {
     border: round #fabd2f;
     border-title-color: #fabd2f;
 }
 
-#sidebar > .option-list--option-highlighted {
+#lists {
+    height: 1fr;
+    background: #1d2021;
+    border: none;
+    padding: 0;
+}
+
+#lists > .option-list--option-highlighted {
     background: #3c3836;
+}
+
+#newlist {
+    dock: bottom;
+    height: 1;
+    margin: 1 0 0 0;
+    color: #7c6f64;
 }
 
 #right {

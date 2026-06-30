@@ -45,6 +45,15 @@ from .tui_widgets import (
 )
 
 
+class NewListButton(Static):
+    """
+    Footer affordance docked at the bottom of the Lists pane.
+    """
+
+    def on_click(self) -> None:
+        self.app.start_new_list()
+
+
 class Sidebar(OptionList):
     """
     Lists pane: vim keys on top of the built-in option list.
@@ -182,8 +191,12 @@ class GTaskTUI(App):
         self._list_buffer = ""
         self._suppress = False  # ignore highlight events during a rebuild
 
-        self.sidebar = Sidebar(id="sidebar")
-        self.sidebar.border_title = "Lists"
+        self.sidebar = Sidebar(id="lists")
+        self.new_list_btn = NewListButton(
+            Text("  ＋ New list", style=FAINT), id="newlist"
+        )
+        self.left = Vertical(self.sidebar, self.new_list_btn, id="sidebar")
+        self.left.border_title = "Lists"
         self.celebrate = Static(id="celebrate")
         self.celebrate.display = False
         self.summary = Static(id="summary")
@@ -198,7 +211,7 @@ class GTaskTUI(App):
         self.search.display = False
 
     def compose(self) -> ComposeResult:
-        yield Horizontal(self.sidebar, self.right, id="body")
+        yield Horizontal(self.left, self.right, id="body")
         yield self.search
         yield Static(hint_bar(), id="hints")
 
@@ -290,10 +303,7 @@ class GTaskTUI(App):
                 options.append(self._list_option(item))
         if self._list_edit == "new":
             options.append(self._edit_row(None))
-        else:
-            options.append(
-                Option(Text("  ＋ New list", style=FAINT), id="action:new")
-            )
+        self.new_list_btn.display = self._list_edit != "new"
         self._option_ids = [
             opt.id for opt in options if isinstance(opt, Option)
         ]
@@ -361,9 +371,6 @@ class GTaskTUI(App):
     def on_option_list_option_selected(
         self, event: OptionList.OptionSelected
     ) -> None:
-        if event.option_id == "action:new":
-            self.start_new_list()
-            return
         self._select_view(event.option_id)
         self.table.focus()
 
