@@ -54,6 +54,18 @@ class NewListButton(Static):
         self.app.start_new_list()
 
 
+class EmptyPane(Static):
+    """
+    The placeholder for an empty view; focusable so a still adds a task here.
+    """
+
+    can_focus = True
+    BINDINGS = [Binding("left", "focus_lists", show=False)]
+
+    def action_focus_lists(self) -> None:
+        self.app.sidebar.focus()
+
+
 class Sidebar(OptionList):
     """
     Lists pane: vim keys on top of the built-in option list.
@@ -68,8 +80,7 @@ class Sidebar(OptionList):
     ]
 
     def action_focus_tasks(self) -> None:
-        if self.app.table.display:
-            self.app.table.focus()
+        self.app.focus_tasks()
 
     def on_key(self, event: events.Key) -> None:
         # While focused, a/e/x manage lists; during an inline edit every key
@@ -189,6 +200,7 @@ class GTaskTUI(App):
         self._list_edit: str | None = None  # None | "new" | "rename"
         self._list_target: str | None = None
         self._list_buffer = ""
+        self._list_cursor = 0
         self._suppress = False  # ignore highlight events during a rebuild
 
         self.sidebar = Sidebar(id="lists")
@@ -209,7 +221,7 @@ class GTaskTUI(App):
             cell_padding=1,
             show_header=False,
         )
-        self.empty = Static(id="empty")
+        self.empty = EmptyPane(id="empty")
         self.empty.display = False
         self.right = Vertical(
             self.celebrate,
@@ -270,6 +282,7 @@ class GTaskTUI(App):
         self.lists = []
         self.tasks_by_list = {}
         self.list_colors = {}
+        bundles = sorted(bundles, key=lambda b: b[0].get("title", "").lower())
         for index, (tl, tasks) in enumerate(bundles):
             list_id = tl["id"]
             self.lists.append(
@@ -333,10 +346,18 @@ class GTaskTUI(App):
 
     def _edit_row(self, list_id: str | None) -> Option:
         color = self.list_colors.get(list_id, YELLOW) if list_id else YELLOW
+        buf, cur = self._list_buffer, self._list_cursor
+        box = "#fbf1c7 on #504945"
         text = Text()
         text.append("▎", style=YELLOW)
         text.append(" ● ", style=color)
-        text.append(f" {self._list_buffer}█ ", style="#fbf1c7 on #504945")
+        text.append(" ", style=box)
+        text.append(buf[:cur], style=box)
+        text.append(
+            buf[cur] if cur < len(buf) else " ", style="#282828 on #fbf1c7"
+        )
+        text.append(buf[cur + 1 :], style=box)
+        text.append(" ", style=box)
         oid = f"list:{list_id}" if list_id else "action:new"
         return Option(text, id=oid)
 
@@ -613,6 +634,11 @@ class GTaskTUI(App):
         else:
             self.notify("No link in this task", severity="warning")
 
+    def focus_tasks(self) -> None:
+        target = self.table if self.table.display else self.empty
+        if target.display:
+            target.focus()
+
     def action_add(self) -> None:
         if not self.lists:
             return
@@ -702,6 +728,7 @@ class GTaskTUI(App):
         self._list_edit = "new"
         self._list_target = None
         self._list_buffer = ""
+        self._list_cursor = 0
         self.sidebar.focus()
         self._build_sidebar()
         self._update_hints()
@@ -714,6 +741,7 @@ class GTaskTUI(App):
         self._list_edit = "rename"
         self._list_target = item["id"]
         self._list_buffer = item["title"]
+        self._list_cursor = len(self._list_buffer)
         self._build_sidebar()
         self._update_hints()
 
@@ -734,16 +762,32 @@ class GTaskTUI(App):
         )
 
     def list_edit_key(self, event: events.Key) -> None:
-        if event.key == "enter":
+        key, cur, buf = event.key, self._list_cursor, self._list_buffer
+        if key == "enter":
             self._commit_list_edit()
-        elif event.key == "escape":
+            return
+        if key == "escape":
             self._end_list_edit()
-        elif event.key == "backspace":
-            self._list_buffer = self._list_buffer[:-1]
-            self._build_sidebar()
+            return
+        if key == "left":
+            self._list_cursor = max(0, cur - 1)
+        elif key == "right":
+            self._list_cursor = min(len(buf), cur + 1)
+        elif key == "home":
+            self._list_cursor = 0
+        elif key == "end":
+            self._list_cursor = len(buf)
+        elif key == "backspace" and cur > 0:
+            self._list_buffer = buf[: cur - 1] + buf[cur:]
+            self._list_cursor = cur - 1
+        elif key == "delete":
+            self._list_buffer = buf[:cur] + buf[cur + 1 :]
         elif event.character and event.character.isprintable():
-            self._list_buffer += event.character
-            self._build_sidebar()
+            self._list_buffer = buf[:cur] + event.character + buf[cur:]
+            self._list_cursor = cur + 1
+        else:
+            return
+        self._build_sidebar()
 
     def _commit_list_edit(self) -> None:
         name = self._list_buffer.strip()
