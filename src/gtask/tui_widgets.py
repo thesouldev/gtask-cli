@@ -378,7 +378,7 @@ class HelpScreen(ModalScreen):
     ]
 
     ROWS = [
-        ("Tab / ⇧Tab", "switch pane"),
+        ("← / →  ·  Tab", "switch pane"),
         ("j / k", "down / up"),
         ("g / G", "top / bottom"),
         ("Enter", "open detail / list"),
@@ -423,7 +423,7 @@ def hint_bar(mode: str = "tasks") -> Text:
     """
     rows = {
         "tasks": [
-            ("Tab", "panes"),
+            ("←/→", "panes"),
             ("j/k", "move"),
             ("Enter", "open"),
             ("Space", "done"),
@@ -438,7 +438,7 @@ def hint_bar(mode: str = "tasks") -> Text:
             ("q", "quit"),
         ],
         "lists": [
-            ("Tab", "panes"),
+            ("←/→", "panes"),
             ("j/k", "move"),
             ("Enter", "open"),
             ("a", "new list"),

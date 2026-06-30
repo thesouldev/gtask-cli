@@ -55,7 +55,12 @@ class Sidebar(OptionList):
         Binding("k", "cursor_up", show=False),
         Binding("g", "first", show=False),
         Binding("G", "last", show=False),
+        Binding("right", "focus_tasks", show=False),
     ]
+
+    def action_focus_tasks(self) -> None:
+        if self.app.table.display:
+            self.app.table.focus()
 
     def on_key(self, event: events.Key) -> None:
         # While focused, a/e/x manage lists; during an inline edit every key
@@ -92,7 +97,15 @@ class TaskTable(DataTable):
         Binding("e", "edit", show=False),
         Binding("d", "delete", show=False),
         Binding("A", "add_subtask", show=False),
+        Binding("left", "focus_lists", show=False),
+        Binding("right", "noop", show=False),
     ]
+
+    def action_focus_lists(self) -> None:
+        self.app.sidebar.focus()
+
+    def action_noop(self) -> None:
+        pass
 
     def action_cursor_up(self) -> None:
         if not self.row_count:
